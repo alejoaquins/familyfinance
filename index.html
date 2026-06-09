@@ -12,8 +12,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-152x152.png">
 <style>
-:root{--bg:#f8f7f4;--bg2:#ffffff;--bg3:#f0efe9;--text:#1a1a1a;--text2:#555;--text3:#888;--border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);--accent:#2563eb;--accent-light:#eff6ff;--green:#16a34a;--green-light:#f0fdf4;--red:#dc2626;--red-light:#fef2f2;--amber:#d97706;--amber-light:#fffbeb;--radius:12px;--rsm:8px;--sh:0 2px 8px rgba(0,0,0,0.08)}
-.dark{--bg:#111827;--bg2:#1f2937;--bg3:#0d1117;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--border:rgba(255,255,255,0.12);--border2:rgba(255,255,255,0.22);--accent:#60a5fa;--accent-light:#1e3a5f;--green:#4ade80;--green-light:#052e16;--red:#f87171;--red-light:#2d0808;--amber:#fbbf24;--amber-light:#2d1b00;--sh:0 2px 8px rgba(0,0,0,0.4)}
+:root{--bg:#ffffff;--bg2:#ffffff;--bg3:#f5f7fa;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.15);--accent:#2563eb;--accent-light:#eff6ff;--green:#16a34a;--green-light:#f0fdf4;--red:#dc2626;--red-light:#fef2f2;--amber:#d97706;--amber-light:#fffbeb;--radius:12px;--rsm:8px;--sh:0 2px 12px rgba(0,0,0,0.06)}
+.dark{--bg:#1a1f2e;--bg2:#242938;--bg3:#141824;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);--accent:#3b82f6;--accent-light:#1e3356;--green:#4ade80;--green-light:#052e16;--red:#f87171;--red-light:#2d0808;--amber:#fbbf24;--amber-light:#2d1b00;--sh:0 2px 12px rgba(0,0,0,0.4)}
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;height:100dvh;overflow:hidden}
 @supports (height: 100dvh){html,body{height:100dvh}}
@@ -215,6 +215,7 @@ input:checked+.sw-sl:before{transform:translateX(20px)}
     <div class="nav-item"        data-tab="transactions" onclick="switchTab('transactions')"><span>📋</span>Movimientos</div>
     <div class="nav-item"        data-tab="budget"       onclick="switchTab('budget')">      <span>🎯</span>Presupuesto</div>
     <div class="nav-item"        data-tab="reports"      onclick="switchTab('reports')">     <span>📊</span>Reportes</div>
+    <div class="nav-item"        data-tab="goals"        onclick="switchTab('goals')">       <span>⭐</span>Metas</div>
     <div class="nav-item"        data-tab="settings"     onclick="switchTab('settings')">    <span>⚙️</span>Config</div>
   </nav>
 </div>
@@ -243,7 +244,8 @@ let S = {
   dark:false, tab:'home', aiPeriod:'month', aiRecs:[], aiLoading:false,
   familyCode:'', familyName:'', currentUser:{id:0,name:'',role:'admin'},
   users:[], transactions:[], tdcCards:[], budgets:[],
-  customCategories:[]
+  customCategories:[], goals:[],
+  goalsAiRecs:[], goalsAiLoading:false
 };
 let selectedTx = null;
 let syncInterval= null;
@@ -322,6 +324,7 @@ async function syncFromCloud(){
     if(data.budgets)S.budgets=data.budgets.map(b=>({...b,id:Number(b.id)||0,limit:Number(b.limit)||0}));
     if(data.tdcCards)S.tdcCards=data.tdcCards.map(c=>({...c,id:Number(c.id)||0,cutDay:Number(c.cutDay)||20,payDay:Number(c.payDay)||10,limit:Number(c.limit)||0}));
     if(data.customCategories)S.customCategories=data.customCategories;
+    if(data.goals)S.goals=data.goals;
     saveLocal();setSyncStatus('ok');render();
   }catch(e){setSyncStatus('err');console.error('sync error',e);}
 }
@@ -333,6 +336,7 @@ async function pushAll(){
       transactions:S.transactions,users:S.users,
       budgets:S.budgets,tdcCards:S.tdcCards,
       customCategories:S.customCategories||[],
+      goals:S.goals||[],
       familyName:S.familyName,familyCode:S.familyCode
     });
     setSyncStatus('ok');
@@ -472,7 +476,7 @@ function startApp(){
 
 // ─── LOCAL STORAGE ───────────────────────────────────────────────────────────
 function saveLocal(){
-  try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod}));}catch(e){}
+  try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod,goalsAiRecs:S.goalsAiRecs||[]}));}catch(e){}
 }
 function loadLocal(){
   try{
@@ -510,8 +514,9 @@ const ucolor=id=>{const u=S.users.find(u=>Number(u.id)===Number(id));return u?u.
 
 // ─── TX ROW ───────────────────────────────────────────────────────────────────
 function txHtml(t){
+  const cats=getCatEmojis();
   return`<div class="tx-item" id="tx-${t.id}" onclick="toggleDelete(${t.id})">
-    <div class="tx-icon" style="background:${t.type==='income'?'var(--green-light)':'var(--bg3)'}">${catEmojis[t.category]||'📦'}</div>
+    <div class="tx-icon" style="background:${t.type==='income'?'var(--green-light)':'var(--bg3)'}">${cats[t.category]||'📦'}</div>
     <div class="tx-info">
       <div class="tx-name">${t.desc}</div>
       <div class="tx-meta">
@@ -521,19 +526,58 @@ function txHtml(t){
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px"><span style="width:7px;height:7px;border-radius:50%;background:${ucolor(t.user)};display:inline-block;margin-right:4px"></span>${uname(t.user)}</div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
       <div class="tx-amt ${t.type==='income'?'inc':'exp'}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
-      <button class="del-btn" id="del-${t.id}" onclick="event.stopPropagation();deleteTx(${t.id})">🗑</button>
+      <div style="font-size:16px;color:var(--text3)">›</div>
     </div>
   </div>`;
 }
 function toggleDelete(id){
-  if(selectedTx&&selectedTx!==id){const pb=document.getElementById('del-'+selectedTx);const pr=document.getElementById('tx-'+selectedTx);if(pb)pb.style.display='none';if(pr)pr.classList.remove('selected');}
-  const btn=document.getElementById('del-'+id),row=document.getElementById('tx-'+id);
-  if(!btn||!row)return;
-  const vis=btn.style.display==='flex';
-  if(vis){btn.style.display='none';row.classList.remove('selected');selectedTx=null;}
-  else{btn.style.display='flex';row.classList.add('selected');selectedTx=id;}
+  openTxDetail(id);
+}
+
+function openTxDetail(id){
+  const t=S.transactions.find(x=>Number(x.id)===Number(id));
+  if(!t)return;
+  const u=S.users.find(u=>Number(u.id)===Number(t.user));
+  const cats=getCatEmojis();
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal">
+    <div class="mhandle"></div>
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="width:56px;height:56px;border-radius:14px;background:${t.type==='income'?'var(--green-light)':'var(--bg3)'};display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px">${cats[t.category]||'📦'}</div>
+      <div style="font-size:20px;font-weight:700;color:var(--text)">${t.desc}</div>
+      <div style="font-size:32px;font-weight:700;margin:8px 0;color:${t.type==='income'?'var(--green)':'var(--red)'}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--rsm);padding:4px 0;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:.5px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2)">Categoría</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text)">${cats[t.category]||'📦'} ${t.category}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:.5px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2)">Fecha</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text)">${new Date(t.date+'T12:00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:.5px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2)">Forma de pago</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text)">${t.payType==='tdc'?'💳 Tarjeta Crédito':t.payType==='tdd'?'💳 Tarjeta Débito':'💵 Efectivo'}${t.tdcCard?' — '+t.tdcCard:''}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:.5px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2)">Moneda original</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text)">${t.currency||'CLP'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 16px">
+        <span style="font-size:13px;color:var(--text2)">Registrado por</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text)"><span style="width:8px;height:8px;border-radius:50%;background:${u?u.color:'#888'};display:inline-block"></span>${u?u.name:'?'}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      ${btnS('Cerrar','closeModal()','flex:1')}
+      <button onclick="closeModal();deleteTx(${t.id})" style="flex:1;padding:13px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;border:none;background-color:var(--red-light);color:var(--red);">🗑 Eliminar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeModal();});
 }
 async function deleteTx(id){
   const t=S.transactions.find(x=>Number(x.id)===Number(id));
@@ -560,7 +604,7 @@ function renderHome(){
     ${S.budgets.slice(0,4).map(b=>{const sp=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const pct=b.limit>0?Math.min(100,Math.round((sp/b.limit)*100)):0;const col=pct>=100?'var(--red)':pct>=80?'var(--amber)':'var(--green)';return`<div class="bud-item"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="bud-name">${catEmojis[b.category]||'📦'} ${b.category}</div><div style="text-align:right"><div style="font-size:14px;font-weight:600;color:${col}">${fmtS(sp)}</div><div style="font-size:11px;color:var(--text2)">de ${fmtS(b.limit)}</div></div></div><div class="pb"><div class="pf" style="width:${pct}%;background:${col}"></div></div></div>`;}).join('')}
   </div>
   <div class="card"><div class="sec-title">🕐 Últimos movimientos <span class="sec-link" onclick="switchTab('transactions')">Ver todos</span></div>
-    <div class="hint-bar">👆 Toca un movimiento para eliminar</div>
+
     ${recent.length?recent.map(txHtml).join(''):'<div style="text-align:center;padding:20px;color:var(--text3)">Sin movimientos aún</div>'}
   </div>`;
 }
@@ -574,7 +618,7 @@ function renderTransactions(){
     <div class="chip" onclick="filterTx('tdc',this)">TDC</div>
     <div class="chip" onclick="filterTx('tdd',this)">TDD</div>
   </div></div>
-  <div class="hint-bar">👆 Toca un movimiento para revelar 🗑</div>
+
   <div class="card" id="txList">${sorted.length?sorted.map(txHtml).join(''):'<div style="text-align:center;padding:20px;color:var(--text3)">Sin movimientos aún</div>'}</div>`;
 }
 function filterTx(f,el){
@@ -634,6 +678,159 @@ async function getAIAdvice(){
     const d=await res.json();S.aiRecs=JSON.parse(d.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim()).recommendations;
   }catch(e){S.aiRecs=[{icon:'💡',title:'Tasa de ahorro',type:'save',text:`Tu ahorro es ${sv}%. Deberías ahorrar ${fmt(Math.round(inc*0.2))} al mes.`,saving:fmt(Math.round(inc*0.2))+' al mes'}];}
   S.aiLoading=false;saveLocal();render();
+}
+
+// ─── GOALS ───────────────────────────────────────────────────────────────────
+function renderGoals(){
+  const{inc,exp,bal}=getStats('month');
+  const sv=inc>0?Math.round((bal/inc)*100):0;
+  const goalsHtml=(S.goals||[]).length===0
+    ?`<div style="text-align:center;padding:32px 16px;color:var(--text2)"><div style="font-size:48px;margin-bottom:12px">⭐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">Sin metas aún</div><div style="font-size:13px">Crea tu primera meta de ahorro</div></div>`
+    :(S.goals||[]).map(g=>{
+      const now=new Date();
+      const end=new Date(g.deadline);
+      const monthsLeft=Math.max(0,Math.round((end-now)/(1000*60*60*24*30)));
+      const saved=g.saved||0;
+      const pct=g.amount>0?Math.min(100,Math.round((saved/g.amount)*100)):0;
+      const needed=Math.max(0,g.amount-saved);
+      const monthlyNeeded=monthsLeft>0?Math.round(needed/monthsLeft):needed;
+      const col=pct>=100?'var(--green)':pct>=50?'var(--accent)':'var(--amber)';
+      return`<div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <div style="font-size:16px;font-weight:600;color:var(--text)">${g.emoji||'⭐'} ${g.name}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px">Meta: ${fmt(g.amount)} · ${monthsLeft} meses restantes</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="cursor:pointer;font-size:13px" onclick="editGoal(${g.id})">✏️</span>
+            <span style="cursor:pointer;color:var(--red)" onclick="deleteGoal(${g.id})">✕</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--text2)">Ahorrado: <strong style="color:var(--text)">${fmt(saved)}</strong></span>
+          <span style="font-size:13px;font-weight:600;color:${col}">${pct}%</span>
+        </div>
+        <div class="pb" style="height:10px;margin-bottom:10px"><div class="pf" style="width:${pct}%;background:${col}"></div></div>
+        <div style="display:flex;gap:8px;justify-content:space-between;background:var(--bg3);border-radius:var(--rsm);padding:10px">
+          <div style="text-align:center;flex:1"><div style="font-size:11px;color:var(--text2)">Falta</div><div style="font-size:14px;font-weight:600;color:var(--text)">${fmtS(needed)}</div></div>
+          <div style="width:.5px;background:var(--border)"></div>
+          <div style="text-align:center;flex:1"><div style="font-size:11px;color:var(--text2)">Necesitas/mes</div><div style="font-size:14px;font-weight:600;color:${monthlyNeeded>bal?'var(--red)':'var(--green)'}">${fmtS(monthlyNeeded)}</div></div>
+          <div style="width:.5px;background:var(--border)"></div>
+          <div style="text-align:center;flex:1"><div style="font-size:11px;color:var(--text2)">Meses</div><div style="font-size:14px;font-weight:600;color:var(--text)">${monthsLeft}</div></div>
+        </div>
+        ${pct<100?`<button onclick="addSavingToGoal(${g.id})" style="width:100%;margin-top:10px;padding:10px;border-radius:8px;border:none;background:var(--accent-light);color:var(--accent);font-size:13px;font-weight:500;cursor:pointer">+ Registrar ahorro</button>`:`<div style="text-align:center;padding:10px;font-size:14px;font-weight:600;color:var(--green)">🎉 ¡Meta alcanzada!</div>`}
+      </div>`;
+    }).join('');
+
+  const aiContent=S.goalsAiLoading
+    ?`<div style="text-align:center;padding:32px"><div class="loader"></div><div style="font-size:13px;color:var(--text2);margin-top:12px">Analizando tu capacidad de ahorro...</div></div>`
+    :(S.goalsAiRecs||[]).length>0
+      ?(S.goalsAiRecs||[]).map(r=>`<div class="ai-card"><div class="ai-card-header"><div class="ai-card-icon ${r.type||'insight'}">${r.icon}</div><div class="ai-card-title">${r.title}</div><span class="ai-card-badge ${r.type||'insight'}">${r.type==='save'?'Ahorro':r.type==='alert'?'Alerta':'Análisis'}</span></div><div class="ai-card-body">${r.text}</div>${r.saving?`<div class="ai-card-saving">💡 ${r.saving}</div>`:''}</div>`).join('')
+      :`<div style="text-align:center;padding:24px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">Analiza tu comportamiento de gastos y te digo si puedes alcanzar tu meta</div>${btnP('✨ Analizar mis metas','analyzeGoals()','width:auto;padding:10px 24px;margin:0 auto')}</div>`;
+
+  return`
+  <div style="margin-bottom:12px">${goalsHtml}</div>
+  ${btnP('+ Nueva meta','openAddGoal()')}
+  <div style="margin-top:16px">
+    <div class="ai-header"><div class="ai-avatar">🤖</div><div><div style="font-size:15px;font-weight:600">Análisis de metas IA</div><div style="font-size:12px;opacity:.8;margin-top:2px">¿Puedes alcanzar tus metas?</div></div></div>
+    ${(S.goalsAiRecs||[]).length>0&&!S.goalsAiLoading?`<div style="margin-bottom:10px">${btnP('🔄 Actualizar análisis','analyzeGoals()')}</div>`:''}
+    ${aiContent}
+  </div>`;
+}
+
+function openAddGoal(ex){
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">${ex?'✏️ Editar':'⭐ Nueva'} meta de ahorro</div>
+  <div class="fg"><label class="fl">Nombre de la meta</label><input class="fi" id="gName" placeholder="Ej: Vacaciones, Auto, Fondo de emergencia" value="${ex?ex.name:''}"></div>
+  <div class="fr">
+    <div class="fg"><label class="fl">Emoji</label><input class="fi" id="gEmoji" placeholder="⭐" style="text-align:center;font-size:20px" value="${ex?ex.emoji:'⭐'}"></div>
+    <div class="fg"><label class="fl">Monto objetivo (CLP)</label><input class="fi" id="gAmount" type="number" inputmode="decimal" placeholder="1000000" value="${ex?ex.amount:''}"></div>
+  </div>
+  <div class="fg"><label class="fl">Fecha límite</label><input class="fi" id="gDeadline" type="date" value="${ex?ex.deadline:new Date(new Date().setMonth(new Date().getMonth()+6)).toISOString().slice(0,10)}"></div>
+  <div class="fg"><label class="fl">Ya tengo ahorrado (CLP)</label><input class="fi" id="gSaved" type="number" inputmode="decimal" placeholder="0" value="${ex?ex.saved:0}"></div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="saveGoal(${ex?ex.id:0})" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Guardar</button>
+  </div></div>`;
+  document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function saveGoal(eid){
+  const name=document.getElementById('gName').value.trim();
+  const emoji=document.getElementById('gEmoji').value.trim()||'⭐';
+  const amount=parseInt(document.getElementById('gAmount').value)||0;
+  const deadline=document.getElementById('gDeadline').value;
+  const saved=parseInt(document.getElementById('gSaved').value)||0;
+  if(!name||!amount||!deadline){showToast('⚠️ Completa todos los campos');return;}
+  if(eid){S.goals=S.goals.map(g=>Number(g.id)===Number(eid)?{...g,name,emoji,amount,deadline,saved}:g);}
+  else{if(!S.goals)S.goals=[];S.goals.push({id:Date.now(),name,emoji,amount,deadline,saved,createdAt:new Date().toISOString().slice(0,10)});}
+  closeModal();render();await pushAll();showToast('✅ Meta guardada');
+}
+
+function editGoal(id){const g=(S.goals||[]).find(x=>Number(x.id)===Number(id));if(g)openAddGoal(g);}
+async function deleteGoal(id){
+  if(!confirm('¿Eliminar esta meta?'))return;
+  S.goals=(S.goals||[]).filter(g=>Number(g.id)!==Number(id));
+  render();await pushAll();showToast('✅ Meta eliminada');
+}
+
+function addSavingToGoal(id){
+  const g=(S.goals||[]).find(x=>Number(x.id)===Number(id));
+  if(!g)return;
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">💰 Registrar ahorro</div>
+  <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">${g.emoji} ${g.name}</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Ahorrado: ${fmt(g.saved||0)} de ${fmt(g.amount)}</div>
+  <div class="fg"><label class="fl">Monto a agregar (CLP)</label><input class="fi" id="savingAmt" type="number" inputmode="decimal" placeholder="50000"></div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="confirmAddSaving(${id})" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Agregar</button>
+  </div></div>`;
+  document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function confirmAddSaving(id){
+  const amt=parseInt(document.getElementById('savingAmt').value)||0;
+  if(!amt){showToast('⚠️ Ingresa un monto');return;}
+  S.goals=(S.goals||[]).map(g=>Number(g.id)===Number(id)?{...g,saved:(g.saved||0)+amt}:g);
+  closeModal();render();await pushAll();showToast('✅ Ahorro registrado');
+}
+
+async function analyzeGoals(){
+  S.goalsAiLoading=true;S.goalsAiRecs=[];render();
+  const{inc,exp,bal}=getStats('month');
+  const sv=inc>0?Math.round((bal/inc)*100):0;
+  const goals=(S.goals||[]);
+  const goalsStr=goals.map(g=>{
+    const end=new Date(g.deadline);
+    const monthsLeft=Math.max(0,Math.round((end-new Date())/(1000*60*60*24*30)));
+    const needed=Math.max(0,g.amount-(g.saved||0));
+    const monthlyNeeded=monthsLeft>0?Math.round(needed/monthsLeft):needed;
+    return`${g.emoji} ${g.name}: necesita ${fmt(monthlyNeeded)}/mes por ${monthsLeft} meses`;
+  }).join('\n');
+  const catS=getCatStats(S.transactions.filter(t=>{const d=new Date(t.date);return d.getMonth()===new Date().getMonth()&&d.getFullYear()===new Date().getFullYear();}));
+  const top=catS.slice(0,4).map(([c,a])=>`${c}: ${fmt(a)}`).join(', ');
+  try{
+    const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:`Eres consejero financiero familiar. Analiza si esta familia puede alcanzar sus metas de ahorro.
+
+Finanzas del mes:
+- Ingresos: ${fmt(inc)}
+- Gastos: ${fmt(exp)}
+- Balance disponible: ${fmt(bal)}
+- Tasa de ahorro actual: ${sv}%
+- Principales gastos: ${top}
+
+Metas de ahorro:
+${goalsStr||'Sin metas definidas'}
+
+Responde SOLO en JSON sin markdown: {"recommendations":[{"icon":"⭐","title":"Título","text":"Análisis específico con montos concretos y consejos accionables","type":"save","saving":"texto opcional"},{"icon":"✂️","title":"Título","text":"Texto","type":"alert","saving":null},{"icon":"📈","title":"Título","text":"Texto","type":"insight","saving":null}]}
+3-4 recomendaciones en español chileno amigable. Sé específico sobre si puede o no alcanzar las metas y qué debe recortar.`}]})});
+    const d=await res.json();
+    S.goalsAiRecs=JSON.parse(d.content.map(i=>i.text||'').join('').replace(/\`\`\`json|\`\`\`/g,'').trim()).recommendations;
+  }catch(e){
+    S.goalsAiRecs=[{icon:'💡',title:'Análisis de metas',type:'insight',text:`Con tu balance actual de ${fmt(bal)} al mes y una tasa de ahorro del ${sv}%, ${goals.length>0?'necesitas ajustar tus gastos para alcanzar tus metas.':'te recomiendo crear metas de ahorro concretas.'}`,saving:null}];
+  }
+  S.goalsAiLoading=false;saveLocal();render();
 }
 
 function renderSettings(){
@@ -725,13 +922,7 @@ function exportPDF(){
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function openAddChoice(){
-  const m=document.createElement('div');m.className='mbg';m.id='addModal';
-  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">¿Qué quieres hacer?</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-    <div class="add-method-card" onclick="closeModal();openAddTx()"><div class="mic">✏️</div><div class="mit">Ingresar manual</div><div class="mis">Escribe el movimiento</div></div>
-    <div class="add-method-card" onclick="closeModal();openScanModal()"><div class="mic">📸</div><div class="mit">Escanear boleta</div><div class="mis">IA detecta automático</div></div>
-  </div>${btnS('Cancelar','closeModal()')}</div>`;
-  document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+  openAddTx();
 }
 
 let curType='expense';
@@ -863,12 +1054,12 @@ function toggleTheme(){S.dark=!S.dark;document.getElementById('mainApp').classLi
 function switchTab(tab){
   S.tab=tab;selectedTx=null;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
-  document.getElementById('fabBtn').style.display=['home','transactions','budget'].includes(tab)?'flex':'none';
+  document.getElementById('fabBtn').style.display=['home','transactions','budget','goals'].includes(tab)?'flex':'none';
   render();
 }
 
 function saveLocal(){
-  try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod}));}catch(e){}
+  try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod,goalsAiRecs:S.goalsAiRecs||[]}));}catch(e){}
 }
 function loadLocal(){
   try{const r=localStorage.getItem('ff_session');if(r){const d=JSON.parse(r);Object.assign(S,d);return true;}}catch(e){}
@@ -883,6 +1074,7 @@ function render(){
   else if(S.tab==='transactions')mc.innerHTML=renderTransactions();
   else if(S.tab==='budget')mc.innerHTML=renderBudget();
   else if(S.tab==='reports')mc.innerHTML=renderReports();
+  else if(S.tab==='goals')mc.innerHTML=renderGoals();
   else if(S.tab==='settings')mc.innerHTML=renderSettings();
   mc.scrollTop=0;
 }
