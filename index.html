@@ -118,6 +118,11 @@ input:checked+.sw-sl:before{transform:translateX(20px)}
 .ai-card-saving{padding:8px 16px;background:var(--green-light);border-top:.5px solid var(--border);font-size:12px;font-weight:600;color:var(--green)}
 .ai-empty{text-align:center;padding:32px 16px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)}
 .ai-loading{text-align:center;padding:32px 16px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)}
+/* Pull to refresh */
+.ptr-indicator{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;display:flex;align-items:center;justify-content:center;padding:12px;background:var(--bg2);border-bottom:.5px solid var(--border);z-index:60;transition:transform .2s;transform:translateX(-50%) translateY(-100%);gap:8px;font-size:13px;color:var(--text2)}
+.ptr-indicator.visible{transform:translateX(-50%) translateY(0)}
+.ptr-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+
 /* Onboarding */
 .ob-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;text-align:center;background:var(--bg3)}
 .ob-logo{font-size:72px;margin-bottom:16px}
@@ -188,6 +193,10 @@ input:checked+.sw-sl:before{transform:translateX(20px)}
 
 <!-- Main App -->
 <div class="app" id="mainApp" style="display:none">
+  <div class="ptr-indicator" id="ptrIndicator">
+    <div class="ptr-spinner"></div>
+    <span id="ptrText">Actualizando...</span>
+  </div>
   <div class="hdr">
     <div>
       <div class="hdr-title" id="hdrTitle">💰 FamilyFinance</div>
@@ -832,6 +841,60 @@ function render(){
   else if(S.tab==='settings')mc.innerHTML=renderSettings();
   mc.scrollTop=0;
 }
+
+// ─── PULL TO REFRESH ─────────────────────────────────────────────────────────
+(function(){
+  let startY=0, pulling=false, threshold=70;
+  const content=document.getElementById('mainContent');
+  const indicator=document.getElementById('ptrIndicator');
+  const ptrText=document.getElementById('ptrText');
+
+  function canPull(){
+    return content && content.scrollTop===0;
+  }
+
+  document.addEventListener('touchstart',e=>{
+    if(canPull()) startY=e.touches[0].clientY;
+  },{passive:true});
+
+  document.addEventListener('touchmove',e=>{
+    if(!startY||!canPull())return;
+    const dist=e.touches[0].clientY-startY;
+    if(dist>10){
+      pulling=true;
+      if(indicator){
+        const progress=Math.min(dist/threshold,1);
+        if(progress>=1){
+          indicator.classList.add('visible');
+          ptrText.textContent='Suelta para actualizar';
+        } else {
+          ptrText.textContent='Tirando para actualizar...';
+        }
+      }
+    }
+  },{passive:true});
+
+  document.addEventListener('touchend',e=>{
+    if(!pulling){startY=0;return;}
+    const dist=e.changedTouches[0].clientY-startY;
+    if(dist>=threshold){
+      if(indicator){
+        indicator.classList.add('visible');
+        ptrText.textContent='Actualizando...';
+      }
+      syncFromCloud().then(()=>{
+        showToast('✅ Contenido actualizado');
+      }).finally(()=>{
+        setTimeout(()=>{
+          if(indicator)indicator.classList.remove('visible');
+        },800);
+      });
+    } else {
+      if(indicator)indicator.classList.remove('visible');
+    }
+    startY=0;pulling=false;
+  },{passive:true});
+})();
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 document.getElementById('themeBtn').addEventListener('click',toggleTheme);
