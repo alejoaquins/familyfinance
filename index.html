@@ -887,6 +887,60 @@ function copyCode(){
   navigator.clipboard.writeText(S.familyCode).then(()=>showToast('✅ Código copiado: '+S.familyCode)).catch(()=>showToast('Código: '+S.familyCode));
 }
 function removeTDC(id){S.tdcCards=(S.tdcCards||[]).filter(c=>Number(c.id)!==Number(id));render();pushAll();}
+
+function openAddTDC(){
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">💳 Agregar tarjeta TDC</div>
+  <div class="fg"><label class="fl">Nombre de la tarjeta</label><input class="fi" id="tN" placeholder="Ej: Visa Santander, Mastercard BCI"></div>
+  <div class="fr">
+    <div class="fg"><label class="fl">Día de corte</label><input class="fi" id="tC" type="number" inputmode="numeric" min="1" max="31" placeholder="20"></div>
+    <div class="fg"><label class="fl">Día de pago</label><input class="fi" id="tP" type="number" inputmode="numeric" min="1" max="31" placeholder="10"></div>
+  </div>
+  <div class="fg"><label class="fl">Límite de crédito (CLP)</label><input class="fi" id="tL" type="number" inputmode="decimal" placeholder="1000000"></div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Solo se guarda el nombre, día de corte y límite — nunca datos bancarios sensibles.</div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="saveTDC()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Guardar</button>
+  </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function saveTDC(){
+  const n=document.getElementById('tN').value.trim();
+  if(!n){showToast('⚠️ Ingresa el nombre de la tarjeta');return;}
+  const cutDay=parseInt(document.getElementById('tC').value)||20;
+  const payDay=parseInt(document.getElementById('tP').value)||10;
+  const limit=parseInt(document.getElementById('tL').value)||1000000;
+  if(!S.tdcCards)S.tdcCards=[];
+  S.tdcCards.push({id:Date.now(),name:n,cutDay,payDay,limit});
+  closeModal();render();await pushAll();
+  showToast('✅ Tarjeta agregada');
+}
+
+function openAddUser(){
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">👤 Agregar miembro</div>
+  <div class="fg"><label class="fl">Nombre</label><input class="fi" id="uN" placeholder="Nombre del familiar"></div>
+  <div class="fg"><label class="fl">Rol</label><select class="fs" id="uR"><option value="member">Miembro</option><option value="admin">Administrador</option></select></div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="saveUser()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Agregar</button>
+  </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function saveUser(){
+  const n=document.getElementById('uN').value.trim();
+  const r=document.getElementById('uR').value;
+  if(!n){showToast('⚠️ Ingresa el nombre');return;}
+  const colors=['#16a34a','#d97706','#7c3aed','#db2777','#059669'];
+  if(!S.users)S.users=[];
+  S.users.push({id:Date.now(),name:n,role:r,color:colors[S.users.length%colors.length]});
+  closeModal();render();await pushAll();
+  showToast('✅ Miembro agregado');
+}
 function removeCustomCat(name){S.customCategories=(S.customCategories||[]).filter(c=>c.name!==name);render();pushAll();showToast('✅ Categoría eliminada');}
 function removeUser(id){S.users=S.users.filter(u=>Number(u.id)!==Number(id));render();pushAll();}
 function leaveFamily(){
@@ -1042,6 +1096,60 @@ function editBudget(id){const b=S.budgets.find(x=>Number(x.id)===Number(id));if(
 async function delBudget(id){S.budgets=S.budgets.filter(b=>Number(b.id)!==Number(id));render();await pushAll();}
 
 function removeTDC(id){S.tdcCards=(S.tdcCards||[]).filter(c=>Number(c.id)!==Number(id));render();pushAll();}
+
+function openAddTDC(){
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">💳 Agregar tarjeta TDC</div>
+  <div class="fg"><label class="fl">Nombre de la tarjeta</label><input class="fi" id="tN" placeholder="Ej: Visa Santander, Mastercard BCI"></div>
+  <div class="fr">
+    <div class="fg"><label class="fl">Día de corte</label><input class="fi" id="tC" type="number" inputmode="numeric" min="1" max="31" placeholder="20"></div>
+    <div class="fg"><label class="fl">Día de pago</label><input class="fi" id="tP" type="number" inputmode="numeric" min="1" max="31" placeholder="10"></div>
+  </div>
+  <div class="fg"><label class="fl">Límite de crédito (CLP)</label><input class="fi" id="tL" type="number" inputmode="decimal" placeholder="1000000"></div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Solo se guarda el nombre, día de corte y límite — nunca datos bancarios sensibles.</div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="saveTDC()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Guardar</button>
+  </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function saveTDC(){
+  const n=document.getElementById('tN').value.trim();
+  if(!n){showToast('⚠️ Ingresa el nombre de la tarjeta');return;}
+  const cutDay=parseInt(document.getElementById('tC').value)||20;
+  const payDay=parseInt(document.getElementById('tP').value)||10;
+  const limit=parseInt(document.getElementById('tL').value)||1000000;
+  if(!S.tdcCards)S.tdcCards=[];
+  S.tdcCards.push({id:Date.now(),name:n,cutDay,payDay,limit});
+  closeModal();render();await pushAll();
+  showToast('✅ Tarjeta agregada');
+}
+
+function openAddUser(){
+  const m=document.createElement('div');m.className='mbg';m.id='addModal';
+  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">👤 Agregar miembro</div>
+  <div class="fg"><label class="fl">Nombre</label><input class="fi" id="uN" placeholder="Nombre del familiar"></div>
+  <div class="fg"><label class="fl">Rol</label><select class="fs" id="uR"><option value="member">Miembro</option><option value="admin">Administrador</option></select></div>
+  <div style="display:flex;gap:10px">
+    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
+    <button onclick="saveUser()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Agregar</button>
+  </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeModal();});
+}
+
+async function saveUser(){
+  const n=document.getElementById('uN').value.trim();
+  const r=document.getElementById('uR').value;
+  if(!n){showToast('⚠️ Ingresa el nombre');return;}
+  const colors=['#16a34a','#d97706','#7c3aed','#db2777','#059669'];
+  if(!S.users)S.users=[];
+  S.users.push({id:Date.now(),name:n,role:r,color:colors[S.users.length%colors.length]});
+  closeModal();render();await pushAll();
+  showToast('✅ Miembro agregado');
+}
 function removeCustomCat(name){S.customCategories=(S.customCategories||[]).filter(c=>c.name!==name);render();pushAll();showToast('✅ Categoría eliminada');}
 function removeUser(id){S.users=S.users.filter(u=>Number(u.id)!==Number(id));render();pushAll();}
 
