@@ -228,14 +228,22 @@ const JSONBIN_KEY = '$2a$10$WvSwHOqyqOCavbC.oSRUne60mu2Jo3wfmNXb4njKLXjbDJ.28rh5
 const JSONBIN_URL = 'https://api.jsonbin.io/v3/b';
 const APP_URL     = 'https://zingy-baklava-757ce8.netlify.app/index.html';
 const API      = 'https://api.anthropic.com/v1/messages';
-const catEmojis= {'Alimentación':'🛒','Servicios':'💡','Vivienda':'🏠','Comida fuera':'🍽️','Vestuario':'👗','Entretenimiento':'🎬','Transporte':'🚗','Salud':'🏥','Educación':'📚','Ahorro':'🏦','Ingreso':'💰','Otros':'📦'};
+const BASE_CATS = {'Alimentación':'🛒','Servicios':'💡','Vivienda':'🏠','Comida fuera':'🍽️','Vestuario':'👗','Entretenimiento':'🎬','Transporte':'🚗','Salud':'🏥','Educación':'📚','Ahorro':'🏦','Ingreso':'💰','Otros':'📦'};
+function getCatEmojis(){
+  const custom={};
+  (S.customCategories||[]).forEach(c=>custom[c.name]=c.emoji||'📌');
+  return {...BASE_CATS,...custom};
+}
+// backward compat
+const catEmojis=new Proxy({},{get:(_,k)=>getCatEmojis()[k]||'📦',has:(_,k)=>k in getCatEmojis(),ownKeys:()=>Object.keys(getCatEmojis())});
 const rates    = {CLP:1,USD:950,EUR:1040,UF:38000,BRL:188,ARS:1};
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let S = {
   dark:false, tab:'home', aiPeriod:'month', aiRecs:[], aiLoading:false,
   familyCode:'', familyName:'', currentUser:{id:0,name:'',role:'admin'},
-  users:[], transactions:[], tdcCards:[], budgets:[]
+  users:[], transactions:[], tdcCards:[], budgets:[],
+  customCategories:[]
 };
 let selectedTx = null;
 let syncInterval= null;
@@ -313,6 +321,7 @@ async function syncFromCloud(){
     if(data.users)S.users=data.users.map(u=>({...u,id:Number(u.id)||0}));
     if(data.budgets)S.budgets=data.budgets.map(b=>({...b,id:Number(b.id)||0,limit:Number(b.limit)||0}));
     if(data.tdcCards)S.tdcCards=data.tdcCards.map(c=>({...c,id:Number(c.id)||0,cutDay:Number(c.cutDay)||20,payDay:Number(c.payDay)||10,limit:Number(c.limit)||0}));
+    if(data.customCategories)S.customCategories=data.customCategories;
     saveLocal();setSyncStatus('ok');render();
   }catch(e){setSyncStatus('err');console.error('sync error',e);}
 }
@@ -323,6 +332,7 @@ async function pushAll(){
     await dbWrite({
       transactions:S.transactions,users:S.users,
       budgets:S.budgets,tdcCards:S.tdcCards,
+      customCategories:S.customCategories||[],
       familyName:S.familyName,familyCode:S.familyCode
     });
     setSyncStatus('ok');
@@ -651,6 +661,13 @@ function renderSettings(){
     <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px">Los nuevos miembros se unen escaneando el QR</div>
   </div>
 
+  <!-- Custom Categories -->
+  <div class="card"><div class="sec-title">🏷️ Categorías personalizadas</div>
+    ${(S.customCategories||[]).length===0?'<div style="font-size:13px;color:var(--text3);text-align:center;padding:12px">Sin categorías personalizadas aún</div>':''}
+    ${(S.customCategories||[]).map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:.5px solid var(--border)"><span style="font-size:20px">${c.emoji||'📌'}</span><span style="flex:1;font-size:14px;color:var(--text)">${c.name}</span><span style="cursor:pointer;color:var(--red)" onclick="removeCustomCat('${c.name}')">✕</span></div>`).join('')}
+    <div style="font-size:12px;color:var(--text3);margin-top:8px">Agrega categorías personalizadas desde "Nuevo presupuesto"</div>
+  </div>
+
   <!-- TDC -->
   <div class="card"><div class="sec-title">💳 Tarjetas de Crédito</div>
     ${S.tdcCards.map(c=>`<div style="padding:10px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:500;color:var(--text)">💳 ${c.name}</div><div style="font-size:12px;color:var(--text2)">Corte día ${c.cutDay} · Pago día ${c.payDay} · Límite ${fmtS(c.limit)}</div></div><span style="color:var(--red);cursor:pointer;font-size:18px" onclick="removeTDC(${c.id})">✕</span></div></div>`).join('')}
@@ -672,6 +689,9 @@ function renderSettings(){
 function copyCode(){
   navigator.clipboard.writeText(S.familyCode).then(()=>showToast('✅ Código copiado: '+S.familyCode)).catch(()=>showToast('Código: '+S.familyCode));
 }
+function removeTDC(id){S.tdcCards=(S.tdcCards||[]).filter(c=>Number(c.id)!==Number(id));render();pushAll();}
+function removeCustomCat(name){S.customCategories=(S.customCategories||[]).filter(c=>c.name!==name);render();pushAll();showToast('✅ Categoría eliminada');}
+function removeUser(id){S.users=S.users.filter(u=>Number(u.id)!==Number(id));render();pushAll();}
 function leaveFamily(){
   if(!confirm('¿Salir de esta familia?\nPodrás volver a unirte con el mismo código.'))return;
   localStorage.removeItem('ff_session');
@@ -723,7 +743,7 @@ function openAddTx(pre){
   <div class="fg"><label class="fl">Descripción</label><input class="fi" id="txD" placeholder="Ej: Supermercado, Sueldo..." value="${pre?pre.desc:''}"></div>
   <div class="fr"><div class="fg"><label class="fl">Monto</label><input class="fi" id="txA" type="number" inputmode="decimal" placeholder="0" value="${pre?pre.amount:''}" oninput="updCur()"></div><div class="fg"><label class="fl">Moneda</label><select class="fs" id="txC" onchange="updCur()"><option>CLP</option><option>USD</option><option>EUR</option><option>UF</option><option>BRL</option></select></div></div>
   <div id="curInfo" style="font-size:12px;color:var(--accent);margin-bottom:10px;display:none"></div>
-  <div class="fg"><label class="fl">Categoría</label><select class="fs" id="txCat">${Object.keys(catEmojis).filter(c=>c!=='Ingreso').map(c=>`<option ${pre&&pre.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  <div class="fg"><label class="fl">Categoría</label><select class="fs" id="txCat">${Object.keys(getCatEmojis()).filter(c=>c!=='Ingreso').map(c=>`<option ${pre&&pre.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
   <div class="fr"><div class="fg"><label class="fl">Forma de pago</label><select class="fs" id="txP" onchange="togTDC()"><option value="tdd">Débito</option><option value="tdc">Crédito</option><option value="cash">Efectivo</option></select></div><div class="fg" id="tdcWrap" style="display:none"><label class="fl">Tarjeta</label><select class="fs" id="txTDC">${S.tdcCards.map(c=>`<option>${c.name}</option>`).join('')}</select></div></div>
   <div class="fr"><div class="fg"><label class="fl">Fecha</label><input class="fi" id="txDt" type="date" value="${pre?pre.date:new Date().toISOString().slice(0,10)}"></div><div class="fg"><label class="fl">Registrado por</label><select class="fs" id="txU">${S.users.map(u=>`<option value="${u.id}" ${Number(u.id)===Number(S.currentUser.id)?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
   <div style="display:flex;gap:10px;margin-top:4px">
@@ -764,7 +784,7 @@ async function processScan(inp){
   sr.innerHTML='<div style="text-align:center;padding:20px"><div class="loader"></div><div style="font-size:13px;color:var(--text2);margin-top:10px">Analizando con IA...</div></div>';
   const reader=new FileReader();reader.onload=async(e)=>{
     const b64=e.target.result.split(',')[1];
-    try{const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Analiza esta boleta. SOLO JSON sin markdown: {"desc":"nombre comercio","amount":12345,"category":"categoría","date":"YYYY-MM-DD","currency":"CLP"}. Categorías: Alimentación/Servicios/Vivienda/Comida fuera/Vestuario/Entretenimiento/Transporte/Salud/Educación/Otros.'}]}]})});
+    try{const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Eres un experto en análisis de boletas y comprobantes de pago chilenos. Analiza esta imagen cuidadosamente aunque esté en ángulo, tenga sombras o no sea perfecta. Extrae: nombre del comercio, monto total, fecha y categoría. Responde ÚNICAMENTE con JSON válido sin markdown ni texto extra: {"desc":"nombre del comercio o tipo de gasto","amount":12345,"category":"categoría","date":"YYYY-MM-DD","currency":"CLP"}. Para categoría usa exactamente una de estas: Alimentación, Servicios, Vivienda, Comida fuera, Vestuario, Entretenimiento, Transporte, Salud, Educación, Otros. Si el monto tiene puntos de miles como 1.234 conviértelo al número 1234. Si no ves una fecha clara usa la fecha de hoy. Si no ves el monto exacto estima por el contexto. Siempre responde con JSON aunque la imagen no sea perfecta.'}]}]})});
     const d=await res.json();const info=JSON.parse(d.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim());
     sr.innerHTML=`<div style="background:var(--green-light);border:.5px solid var(--green);border-radius:8px;padding:14px"><div style="font-size:13px;color:var(--green);font-weight:500;margin-bottom:8px">✅ Detectado</div><div style="font-size:15px;font-weight:600;color:var(--text)">${info.desc}</div><div style="font-size:22px;font-weight:700;color:var(--red);margin:6px 0">${fmt(info.amount||0)}</div><div style="font-size:12px;color:var(--text2)">${info.category} · ${info.date}</div><button onclick='addFromScan(${JSON.stringify(info)})' style="margin-top:12px;width:100%;padding:13px;border-radius:8px;border:none;background-color:#2563eb;color:#ffffff;font-size:14px;font-weight:500;cursor:pointer;">Agregar movimiento</button></div>`;
     }catch(e){sr.innerHTML='<div style="text-align:center;color:var(--red);padding:20px;font-size:13px">No se pudo leer. Intenta con imagen más clara.</div>';}
@@ -777,10 +797,22 @@ async function addFromScan(info){
 }
 
 function openAddBudget(ex){
-  const cats=Object.keys(catEmojis).filter(c=>c!=='Ingreso'&&c!=='Ahorro');
+  const allCats=Object.keys(getCatEmojis()).filter(c=>c!=='Ingreso'&&c!=='Ahorro');
   const m=document.createElement('div');m.className='mbg';m.id='addModal';
   m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">${ex?'✏️ Editar':'🎯 Nuevo'} presupuesto</div>
-  <div class="fg"><label class="fl">Categoría</label><select class="fs" id="bCat">${cats.map(c=>`<option ${ex&&ex.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  <div class="fg"><label class="fl">Categoría</label>
+    <select class="fs" id="bCat" onchange="toggleCustomCat(this)">
+      ${allCats.map(c=>`<option ${ex&&ex.category===c?'selected':''}>${c}</option>`).join('')}
+      <option value="__new__">➕ Nueva categoría personalizada...</option>
+    </select>
+  </div>
+  <div id="customCatWrap" style="display:none;margin-bottom:14px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="fi" id="customCatEmoji" placeholder="📌" style="width:56px;text-align:center;font-size:20px">
+      <input class="fi" id="customCatName" placeholder="Nombre de la categoría" style="flex:1">
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-top:6px">Escribe un emoji y el nombre</div>
+  </div>
   <div class="fg"><label class="fl">Límite mensual (CLP)</label><input class="fi" id="bLim" type="number" inputmode="decimal" placeholder="100000" value="${ex?ex.limit:''}"></div>
   <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Recibirás alertas al 80% y 100%</div>
   <div style="display:flex;gap:10px">
@@ -789,135 +821,9 @@ function openAddBudget(ex){
   </div></div>`;
   document.body.appendChild(m);
 }
-async function saveBudget(eid){
-  const cat=document.getElementById('bCat').value,lim=parseInt(document.getElementById('bLim').value)||0;
-  if(!lim)return;
-  if(eid)S.budgets=S.budgets.map(b=>Number(b.id)===Number(eid)?{...b,category:cat,limit:lim}:b);
-  else S.budgets.push({id:Date.now(),category:cat,limit:lim});
-  closeModal();render();await pushBudgets();
+
+function toggleCustomCat(sel){
+  const wrap=document.getElementById('customCatWrap');
+  if(wrap)wrap.style.display=sel.value==='__new__'?'block':'none';
 }
 
-function openAddTDC(){
-  const m=document.createElement('div');m.className='mbg';m.id='addModal';
-  m.innerHTML=`<div class="modal"><div class="mhandle"></div><div class="mtitle">💳 Agregar tarjeta TDC</div>
-  <div class="fg"><label class="fl">Nombre</label><input class="fi" id="tN" placeholder="Ej: Visa Santander"></div>
-  <div class="fr"><div class="fg"><label class="fl">Día de corte</label><input class="fi" id="tC" type="number" inputmode="numeric" min="1" max="31" placeholder="20"></div><div class="fg"><label class="fl">Día de pago</label><input class="fi" id="tP" type="number" inputmode="numeric" min="1" max="31" placeholder="10"></div></div>
-  <div class="fg"><label class="fl">Límite (CLP)</label><input class="fi" id="tL" type="number" inputmode="decimal" placeholder="1000000"></div>
-  <div style="display:flex;gap:10px">
-    ${btnS('Cancelar','closeModal()','width:auto;flex:1')}
-    <button onclick="saveTDC()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background-color:#2563eb;color:#ffffff;">Guardar</button>
-  </div></div>`;
-  document.body.appendChild(m);
-}
-async function saveTDC(){
-  const n=document.getElementById('tN').value.trim();if(!n)return;
-  S.tdcCards.push({id:Date.now(),name:n,cutDay:parseInt(document.getElementById('tC').value)||20,payDay:parseInt(document.getElementById('tP').value)||10,limit:parseInt(document.getElementById('tL').value)||1000000});
-  closeModal();render();await pushTDCCards();
-}
-async function removeTDC(id){S.tdcCards=S.tdcCards.filter(c=>Number(c.id)!==Number(id));render();await pushTDCCards();}
-
-function showAlerts(){const al=getBudgetAlerts();const tc=S.tdcCards.map(c=>{const{days,spent}=getTDCStats(c);return days<=5?`💳 ${c.name}: corte en ${days} días — ${fmt(spent)}`:null;}).filter(Boolean);const all=[...al.map(a=>a.msg),...tc];if(!all.length){alert('✅ Todo en orden.');return;}alert('🔔 Alertas:\n\n'+all.join('\n'));}
-function closeModal(){const m=document.getElementById('addModal');if(m)m.remove();}
-
-// ─── THEME ────────────────────────────────────────────────────────────────────
-function applyFabTheme(){const fab=document.getElementById('fabBtn');if(!fab)return;if(S.dark){fab.style.backgroundColor='#f1f5f9';fab.style.color='#1e293b';fab.style.boxShadow='0 4px 20px rgba(0,0,0,.5)';}else{fab.style.backgroundColor='#2563eb';fab.style.color='#ffffff';fab.style.boxShadow='0 4px 20px rgba(37,99,235,.5)';}}
-function toggleTheme(){S.dark=!S.dark;document.getElementById('mainApp').classList.toggle('dark',S.dark);document.getElementById('themeBtn').textContent=S.dark?'☀️':'🌙';applyFabTheme();saveLocal();}
-
-function switchTab(tab){
-  S.tab=tab;selectedTx=null;
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
-  document.getElementById('fabBtn').style.display=['home','transactions','budget'].includes(tab)?'flex':'none';
-  render();
-}
-
-function render(){
-  if(!document.getElementById('mainApp')||document.getElementById('mainApp').style.display==='none')return;
-  document.getElementById('hdrTitle').textContent='💰 '+(S.familyName||'FamilyFinance');
-  const mc=document.getElementById('mainContent');
-  if(S.tab==='home')mc.innerHTML=renderHome();
-  else if(S.tab==='transactions')mc.innerHTML=renderTransactions();
-  else if(S.tab==='budget')mc.innerHTML=renderBudget();
-  else if(S.tab==='reports')mc.innerHTML=renderReports();
-  else if(S.tab==='settings')mc.innerHTML=renderSettings();
-  mc.scrollTop=0;
-}
-
-// ─── PULL TO REFRESH ─────────────────────────────────────────────────────────
-(function(){
-  let startY=0, pulling=false, threshold=70;
-  const content=document.getElementById('mainContent');
-  const indicator=document.getElementById('ptrIndicator');
-  const ptrText=document.getElementById('ptrText');
-
-  function canPull(){
-    return content && content.scrollTop===0;
-  }
-
-  document.addEventListener('touchstart',e=>{
-    if(canPull()) startY=e.touches[0].clientY;
-  },{passive:true});
-
-  document.addEventListener('touchmove',e=>{
-    if(!startY||!canPull())return;
-    const dist=e.touches[0].clientY-startY;
-    if(dist>10){
-      pulling=true;
-      if(indicator){
-        const progress=Math.min(dist/threshold,1);
-        if(progress>=1){
-          indicator.classList.add('visible');
-          ptrText.textContent='Suelta para actualizar';
-        } else {
-          ptrText.textContent='Tirando para actualizar...';
-        }
-      }
-    }
-  },{passive:true});
-
-  document.addEventListener('touchend',e=>{
-    if(!pulling){startY=0;return;}
-    const dist=e.changedTouches[0].clientY-startY;
-    if(dist>=threshold){
-      if(indicator){
-        indicator.classList.add('visible');
-        ptrText.textContent='Actualizando...';
-      }
-      syncFromCloud().then(()=>{
-        showToast('✅ Contenido actualizado');
-      }).finally(()=>{
-        setTimeout(()=>{
-          if(indicator)indicator.classList.remove('visible');
-        },800);
-      });
-    } else {
-      if(indicator)indicator.classList.remove('visible');
-    }
-    startY=0;pulling=false;
-  },{passive:true});
-})();
-
-// ─── INIT ────────────────────────────────────────────────────────────────────
-document.getElementById('themeBtn').addEventListener('click',toggleTheme);
-
-// Check URL params for shared code
-const urlParams=new URLSearchParams(window.location.search);
-const urlCode=urlParams.get('code');
-if(urlCode){document.getElementById('joinCode')&&(document.getElementById('joinCode').value=urlCode);}
-
-// Check if already logged in
-const hasSession=loadLocal();
-if(hasSession&&S.familyCode){
-  document.getElementById('onboarding').style.display='none';
-  startApp();
-}else{
-  document.getElementById('onboarding').style.display='flex';
-  document.getElementById('onboarding').style.flexDirection='column';
-  showObMain();
-  if(S.dark){document.getElementById('onboarding').classList.add('dark');}
-}
-
-// PWA
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
-</script>
-</body>
-</html>
