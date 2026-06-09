@@ -163,6 +163,11 @@ input:checked+.sw-sl:before{transform:translateX(20px)}
       <div class="ob-card-title">Unirme a una familia</div>
       <div class="ob-card-sub">Tengo un código o QR de invitación</div>
     </div>
+    <div class="ob-card" onclick="showObRecover()" style="border-color:var(--amber);background:var(--amber-light)">
+      <div style="font-size:24px;margin-bottom:6px">🔑</div>
+      <div class="ob-card-title" style="color:var(--amber)">Recuperar mi familia</div>
+      <div class="ob-card-sub">Perdí la sesión pero tengo mi código de 6 letras</div>
+    </div>
   </div>
 
   <div class="ob-screen" id="obCreate" style="display:none">
@@ -182,6 +187,16 @@ input:checked+.sw-sl:before{transform:translateX(20px)}
     <div class="fg" style="width:100%"><label class="fl">Código de familia (6 letras)</label><input class="fi" id="joinCode" placeholder="ABCD12" maxlength="6" style="text-align:center;font-size:24px;letter-spacing:6px;font-weight:700;text-transform:uppercase"></div>
     <div class="fg" style="width:100%"><label class="fl">Tu nombre</label><input class="fi" id="joinName" placeholder="Ej: María"></div>
     <button onclick="joinFamily()" style="width:100%;padding:14px;border-radius:8px;border:none;background-color:#2563eb;color:#ffffff;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px">Unirme</button>
+    <button onclick="showObMain()" style="width:100%;padding:12px;border-radius:8px;border:.5px solid var(--border2);background:var(--bg3);color:var(--text);font-size:14px;cursor:pointer">← Volver</button>
+  </div>
+
+  <div class="ob-screen" id="obRecover" style="display:none">
+    <div class="ob-logo">🔑</div>
+    <div class="ob-title">Recuperar familia</div>
+    <div class="ob-sub">Ingresa tu código de familia para recuperar todos tus datos</div>
+    <div class="fg" style="width:100%"><label class="fl">Tu código de familia (6 caracteres)</label><input class="fi" id="recoverCode" placeholder="ABCD12" maxlength="6" style="text-align:center;font-size:24px;letter-spacing:6px;font-weight:700;text-transform:uppercase"></div>
+    <div class="fg" style="width:100%"><label class="fl">Tu nombre</label><input class="fi" id="recoverName" placeholder="Ej: Juan"></div>
+    <button onclick="recoverFamily()" style="width:100%;padding:14px;border-radius:8px;border:none;background-color:#2563eb;color:#ffffff;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px">Recuperar mis datos</button>
     <button onclick="showObMain()" style="width:100%;padding:12px;border-radius:8px;border:.5px solid var(--border2);background:var(--bg3);color:var(--text);font-size:14px;cursor:pointer">← Volver</button>
   </div>
 
@@ -461,6 +476,77 @@ async function joinFamily(){
   }
 }
 
+
+function showObRecover(){
+  document.getElementById('obMain').style.display='none';
+  document.getElementById('obRecover').style.display='flex';
+}
+
+async function recoverFamily(){
+  const code=document.getElementById('recoverCode').value.trim().toUpperCase();
+  const name=document.getElementById('recoverName').value.trim();
+  if(!code||code.length!==6||!name){showToast('⚠️ Completa todos los campos');return;}
+  showObLoading('Buscando tu familia...');
+  try{
+    // List all bins and find the lookup bin for this code
+    const listR=await fetch('https://api.jsonbin.io/v3/b',{
+      headers:{'X-Master-Key':JSONBIN_KEY}
+    });
+    if(!listR.ok)throw new Error('HTTP '+listR.status);
+    const bins=await listR.json();
+    const lookupBin=(bins||[]).find(b=>b.name==='fflookup_'+code);
+    if(!lookupBin){
+      showObMain();
+      showToast('❌ Código no encontrado. Verifica que sea correcto.');
+      return;
+    }
+    // Read lookup to get main binId
+    const lR=await fetch(`${JSONBIN_URL}/${lookupBin.id}/latest`,{
+      headers:{'X-Master-Key':JSONBIN_KEY,'X-Bin-Meta':'false'}
+    });
+    const lookup=await lR.json();
+    const binId=lookup.binId;
+    if(!binId){showObMain();showToast('❌ Error al leer familia.');return;}
+    // Read family data
+    const fR=await fetch(`${JSONBIN_URL}/${binId}/latest`,{
+      headers:{'X-Master-Key':JSONBIN_KEY,'X-Bin-Meta':'false'}
+    });
+    const familyData=await fR.json();
+    // Find if user already exists in family
+    const existingUser=(familyData.users||[]).find(u=>u.name.toLowerCase()===name.toLowerCase());
+    let user;
+    if(existingUser){
+      user=existingUser;
+      showToast('✅ ¡Bienvenido de vuelta, '+user.name+'!');
+    } else {
+      // Add as new member
+      const userId=Date.now();
+      const colors=['#2563eb','#16a34a','#d97706','#7c3aed','#db2777','#059669'];
+      user={id:userId,name,role:'member',color:colors[(familyData.users||[]).length%colors.length]};
+      familyData.users=[...(familyData.users||[]),user];
+      await fetch(`${JSONBIN_URL}/${binId}`,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},
+        body:JSON.stringify(familyData)
+      });
+    }
+    localStorage.setItem('ff_binId',binId);
+    S.familyCode=code;
+    S.familyName=familyData.familyName||'Mi Familia';
+    S.currentUser=user;
+    S.users=familyData.users||[];
+    S.transactions=familyData.transactions||[];
+    S.budgets=familyData.budgets||[];
+    S.tdcCards=familyData.tdcCards||[];
+    S.customCategories=familyData.customCategories||[];
+    S.goals=familyData.goals||[];
+    saveLocal();startApp();
+  }catch(e){
+    console.error('recoverFamily error',e);
+    showObMain();
+    showToast('❌ Error al recuperar: '+e.message);
+  }
+}
 
 function startApp(){
   document.getElementById('onboarding').style.display='none';
@@ -839,7 +925,9 @@ function renderSettings(){
   <!-- Familia e invitación -->
   <div class="card" style="border:1.5px solid var(--accent)">
     <div class="sec-title">👨‍👩‍👧‍👦 ${S.familyName||'Mi Familia'}</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Comparte el código o QR para que tu familia se una desde sus dispositivos.</div>
+    <div style="background:var(--amber-light);border-left:3px solid var(--amber);border-radius:var(--rsm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text)">
+      ⚠️ <strong>Guarda este código</strong> — si limpias el caché o cambias de dispositivo lo necesitarás para recuperar tus datos.
+    </div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:4px;text-align:center">Código de familia</div>
     <div class="family-code">${S.familyCode}</div>
     <div style="text-align:center;margin:12px 0">
