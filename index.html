@@ -196,6 +196,28 @@ const PAY_INC=[{id:'transfer',label:'Transferencia',icon:'📲'},{id:'cash',labe
 function payLabel(p){const f=[...PAY_EXP,...PAY_INC].find(x=>x.id===p);return f?f.icon+' '+f.label:p||'-';}
 function payBadgeClass(p){if(p==='tdc')return'b-tdc';if(p==='tdd')return'b-tdd';if(p==='transfer')return'b-trans';if(p==='cash')return'b-cash';return'b-cat';}
 const RATES={CLP:1,USD:950,EUR:1040,UF:38000,BRL:188,ARS:1};
+function playSound(type){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    if(type==='income'){
+      // Ingreso: tono ascendente alegre (sol-do)
+      osc.frequency.setValueAtTime(523,ctx.currentTime);
+      osc.frequency.setValueAtTime(784,ctx.currentTime+0.12);
+      gain.gain.setValueAtTime(0.18,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.35);
+    } else {
+      // Gasto: tono descendente suave (mi-do)
+      osc.frequency.setValueAtTime(440,ctx.currentTime);
+      osc.frequency.setValueAtTime(330,ctx.currentTime+0.1);
+      gain.gain.setValueAtTime(0.12,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.28);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.28);
+    }
+  }catch(e){}
+}
 let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{}};
 let syncInterval=null,shownBanners=new Set();
 const fmt=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n);
@@ -252,8 +274,7 @@ function addNotif(type,title,body){
   S.notifications.unshift({id:Date.now(),type,title,body,date:today(),read:false});
   if(S.notifications.length>50)S.notifications=S.notifications.slice(0,50);
   updateNBadge();
-  if('Notification' in window&&Notification.permission==='granted'){new Notification('💰 FamilyFinance',{body:`${title}: ${body}`,icon:'icons/icon-152x152.png'});}
-  else if('Notification' in window&&Notification.permission!=='denied'){Notification.requestPermission();}
+  // Internal notifications only - no push
 }
 function updateNBadge(){const u=(S.notifications||[]).filter(n=>!n.read).length;const b=document.getElementById('nbadge');if(b){b.textContent=u>9?'9+':u;b.style.display=u>0?'flex':'none';}}
 function openNC(){
@@ -358,22 +379,62 @@ function renderHome(){
   const{inc,exp,bal,ml}=getStats('month');const sv=inc>0?Math.round((bal/inc)*100):0;
   const bl=getBolsillos();const recent=S.transactions.slice(0,6);const cats=getAllCats();
   const bars=['Ene','Feb','Mar','Abr','May','Jun'].map((mo,i)=>{const v=[680000,720000,695000,810000,740000,exp];const h=Math.round((v[i]/Math.max(1,...v))*72);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center"><div style="height:${h}px;background:${i===5?'#2563eb':'var(--border2)'};width:100%;border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--text3);margin-top:4px">${mo}</div></div>`;}).join('');
-  const tdcs=S.tdcCards.map(c=>{const{days,spent}=getTDCStats(c);const pct=Math.min(100,Math.round((spent/c.limit)*100));return`<div style="padding:10px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:13px;font-weight:500">💳 ${c.name}</div><div style="font-size:11px;color:var(--amber)">Corte en ${days} días</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:var(--amber)">${fmtS(spent)}</div><div style="font-size:10px;color:var(--text2)">${pct}% de ${fmtS(c.limit)}</div></div></div><div class="pb"><div class="pf" style="width:${pct}%;background:${pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)'}"></div></div></div>`;}).join('');
-  const ec=getCats('expense');const budRows=S.budgets.slice(0,4).map(b=>{const sp=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const pct=b.limit>0?Math.min(100,Math.round((sp/b.limit)*100)):0;const col=pct>=100?'var(--red)':pct>=80?'var(--amber)':'var(--green)';return`<div class="bud-item"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="bud-name">${ec[b.category]||'📦'} ${b.category}</div><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:${col}">${fmtS(sp)}</div><div style="font-size:10px;color:var(--text2)">de ${fmtS(b.limit)}</div></div></div><div class="pb"><div class="pf" style="width:${pct}%;background:${col}"></div></div></div>`;}).join('');
   const incS=getCatStats(ml,'income');
+
+  // Collapsible sections — state stored in homeCollapse
+  const HC=window.homeCollapse=window.homeCollapse||{tdc:false,income:false,txs:false};
+
+  const tdcRows=S.tdcCards.map(c=>{const{days,spent}=getTDCStats(c);const pct=Math.min(100,Math.round((spent/c.limit)*100));return`<div style="padding:10px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:13px;font-weight:500">💳 ${c.name}</div><div style="font-size:11px;color:var(--amber)">Corte en ${days} días</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:var(--amber)">${fmtS(spent)}</div><div style="font-size:10px;color:var(--text2)">${pct}% de ${fmtS(c.limit)}</div></div></div><div class="pb"><div class="pf" style="width:${pct}%;background:${pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)'}"></div></div></div>`;}).join('');
+
+  const tdcSection=S.tdcCards.length?`<div class="card" style="border-left:3px solid var(--amber)">
+    <div onclick="toggleHome('tdc')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+      <div class="sec-title" style="margin-bottom:0">💳 Tarjetas de Crédito</div>
+      <span id="hArrowTdc" style="font-size:12px;color:var(--accent)">${HC.tdc?'▶ mostrar':'▼ ocultar'}</span>
+    </div>
+    <div id="hBodyTdc" style="display:${HC.tdc?'none':'block'};margin-top:12px">${tdcRows}</div>
+  </div>`:'';
+
+  const incSection=incS.length?`<div class="card">
+    <div onclick="toggleHome('income')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+      <div class="sec-title" style="margin-bottom:0">💼 Fuentes de ingreso</div>
+      <span id="hArrowIncome" style="font-size:12px;color:var(--accent)">${HC.income?'▶ mostrar':'▼ ocultar'}</span>
+    </div>
+    <div id="hBodyIncome" style="display:${HC.income?'none':'block'};margin-top:12px">${incS.map(([cat,amt])=>`<div class="is"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">${cats[cat]||'💰'}</span><span style="font-size:13px">${cat}</span></div><span style="font-size:13px;font-weight:600;color:var(--green)">+${fmtS(amt)}</span></div>`).join('')}</div>
+  </div>`:'';
+
+  const txSection=`<div class="card">
+    <div onclick="toggleHome('txs')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:600;color:var(--text)">🕐 Últimos movimientos</span><span class="sec-link" onclick="event.stopPropagation();switchTab('transactions')" style="font-size:12px">Ver todos</span></div>
+      <span id="hArrowTxs" style="font-size:12px;color:var(--accent)">${HC.txs?'▶ mostrar':'▼ ocultar'}</span>
+    </div>
+    <div id="hBodyTxs" style="display:${HC.txs?'none':'block'};margin-top:8px">${recent.length?txListHtml(recent):'<div style="padding:20px;text-align:center;color:var(--text3)">Sin movimientos aún</div>'}</div>
+  </div>`;
+
   return`<div class="bal-card"><div class="bal-lbl">Balance disponible del mes</div><div class="bal-amt">${fmt(bal)}</div><div class="bal-row"><div class="bal-mini"><div class="bal-mini-lbl">↑ Ingresos</div><div class="bal-mini-val">${fmtS(inc)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">↓ Egresos</div><div class="bal-mini-val">${fmtS(exp)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">💾 Ahorro</div><div class="bal-mini-val">${sv}%</div></div></div></div>
   <div class="bolsillos"><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">💳</div><div class="bolsillo-lbl">Disponible</div><div class="bolsillo-amt" style="color:var(--accent)">${fmtS(bl.disponible)}</div></div><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">🏦</div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div></div><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">⭐</div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div></div></div>
   <div style="margin-bottom:12px">${btnS('💸 Transferencia interna','openTransferencia()','font-size:13px;padding:9px')}</div>
   <div class="card"><div class="sec-title">📈 Gastos últimos 6 meses</div><div style="display:flex;align-items:flex-end;gap:4px;height:80px">${bars}</div></div>
-  ${S.tdcCards.length?`<div class="card" style="border-left:3px solid var(--amber)"><div class="sec-title">💳 Tarjetas de Crédito</div>${tdcs}</div>`:''}
-  ${incS.length?`<div class="card"><div class="sec-title">💼 Fuentes de ingreso <span class="sec-link" onclick="switchTab('transactions')">Ver</span></div>${incS.map(([cat,amt])=>`<div class="is"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">${cats[cat]||'💰'}</span><span style="font-size:13px">${cat}</span></div><span style="font-size:13px;font-weight:600;color:var(--green)">+${fmtS(amt)}</span></div>`).join('')}</div>`:''}
-  <div class="card"><div class="sec-title">🎯 Presupuesto <span class="sec-link" onclick="switchTab('budget')">Ver todo</span></div>${budRows||'<div style="padding:16px;text-align:center;color:var(--text3)">Sin presupuestos</div>'}</div>
-  <div class="card"><div class="sec-title">🕐 Últimos movimientos <span class="sec-link" onclick="switchTab('transactions')">Ver todos</span></div>${recent.length?txListHtml(recent):'<div style="padding:20px;text-align:center;color:var(--text3)">Sin movimientos aún</div>'}</div>`;
+  ${tdcSection}${incSection}${txSection}`;
+}
+function toggleHome(key){
+  const HC=window.homeCollapse=window.homeCollapse||{};
+  HC[key]=!HC[key];
+  const body=document.getElementById('hBody'+key.charAt(0).toUpperCase()+key.slice(1));
+  const arrow=document.getElementById('hArrow'+key.charAt(0).toUpperCase()+key.slice(1));
+  if(body)body.style.display=HC[key]?'none':'block';
+  if(arrow)arrow.textContent=HC[key]?'▶ mostrar':'▼ ocultar';
 }
 function renderTransactions(){
   const{ml}=getStats('month');const ebyCat=getCatStats(ml,'expense');const totExp=ebyCat.reduce((a,[,v])=>a+v,0);const cats=getAllCats();
   const ch=ebyCat.length?`<div class="card" style="margin-bottom:12px"><div class="sec-title">📊 Gastos por categoría</div>${ebyCat.slice(0,8).map(([cat,amt])=>{const pct=totExp>0?Math.round((amt/totExp)*100):0;return`<div class="cbar-wrap"><div style="width:28px;text-align:center;font-size:16px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>${cat}</span><span>${fmtS(amt)} (${pct}%)</span></div><div class="cbar-bg"><div class="cbar-fill" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div>`:'';
   return`${ch}<div class="card" style="margin-bottom:12px"><div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chip active" onclick="filterTx('all',this)">Todos</div><div class="chip" onclick="filterTx('income',this)">Ingresos</div><div class="chip" onclick="filterTx('expense',this)">Gastos</div><div class="chip" onclick="filterTx('tdc',this)">TDC</div><div class="chip" onclick="filterTx('transfer',this)">Transf.</div><div class="chip" onclick="filterTx('internal',this)">Internos</div></div></div><div class="card" id="txList">${txListHtml(S.transactions)}</div>`;
+}
+function toggleChart(){
+  const body=document.getElementById('chartBody'),arrow=document.getElementById('chartArrow');
+  if(!body)return;
+  const hidden=body.style.display==='none';
+  body.style.display=hidden?'block':'none';
+  if(arrow)arrow.textContent=hidden?'▼ ocultar':'▶ mostrar';
 }
 function filterTx(f,el){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');const fi=S.transactions.filter(t=>f==='all'?true:f==='income'?t.type==='income':f==='expense'?t.type==='expense':f==='internal'?t.type==='internal':t.payType===f);document.getElementById('txList').innerHTML=txListHtml(fi);}
 function renderBudget(){
@@ -605,6 +666,7 @@ async function saveTx(){
   const payType=curPay,tdcCard=payType==='tdc'&&document.getElementById('txTDC')?document.getElementById('txTDC').value:'';
   const tx={id:Date.now(),type:curType,amount:Math.round(amtR*RATES[cur]),currency:cur,desc,category:document.getElementById('txCat').value,date:document.getElementById('txDt').value,user:parseInt(document.getElementById('txU').value),payType,tdcCard};
   S.transactions.push(tx);sortTx();closeModal();render();
+  playSound(curType);
   addNotif('movement',`${uname(tx.user)} registró un ${curType==='income'?'Ingreso':'Gasto'}`,`${desc} — ${fmt(tx.amount)} · ${tx.date}`);
   await pushAll();showToast('✅ Guardado');
   if(curType==='expense'){const{ml}=getStats('month');const b=S.budgets.find(x=>x.category===tx.category);if(b){const sp=ml.filter(t=>t.type==='expense'&&t.category===tx.category).reduce((a,t)=>a+t.amount,0);const pct=b.limit>0?Math.round((sp/b.limit)*100):0;if(pct>=100){addNotif('budget','Presupuesto agotado',`${tx.category}: ${fmt(sp)} de ${fmt(b.limit)}`);await pushAll();}}}
