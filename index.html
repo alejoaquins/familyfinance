@@ -451,7 +451,7 @@ function renderReports(){
   const aiC=S.aiLoading?`<div style="text-align:center;padding:32px"><div class="loader"></div></div>`:S.aiRecs.length>0?S.aiRecs.map(r=>`<div class="ai-card"><div class="ai-card-header"><div class="ai-card-icon ${r.type}">${r.icon}</div><div class="ai-card-title">${r.title}</div><span class="ai-card-badge ${r.type}">${r.type==='save'?'Ahorro':r.type==='alert'?'Alerta':r.type==='increase'?'Presupuesto':'Análisis'}</span></div><div class="ai-card-body">${r.text}</div>${r.saving?`<div class="ai-card-saving">💡 ${r.saving}</div>`:''}</div>`).join(''):`<div style="text-align:center;padding:24px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">Recibe recomendaciones personalizadas</div>${btnP('✨ Analizar ahora','getAIAdvice()','width:auto;padding:10px 24px;margin:0 auto')}</div>`;
   return`<div class="tab-row"><div class="tab active" onclick="setRep('month',this)">Mes</div><div class="tab" onclick="setRep('week',this)">Semana</div><div class="tab" onclick="setRep('year',this)">Año</div></div>
   <div class="sg"><div class="sc"><div class="sl">💰 Ingresos</div><div class="sv green">${fmtS(inc)}</div></div><div class="sc"><div class="sl">💸 Gastos</div><div class="sv red">${fmtS(exp)}</div></div><div class="sc"><div class="sl">🏦 Balance</div><div class="sv ${bal>=0?'green':'red'}">${fmtS(bal)}</div></div><div class="sc"><div class="sl">📈 Ahorro</div><div class="sv ${sv>=20?'green':sv>=10?'amber':'red'}">${sv}%</div></div></div>
-  <div class="card" style="margin-bottom:12px"><div class="sec-title">⬇️ Descargar reporte</div><div class="export-row"><div class="export-btn" onclick="exportExcel()"><div style="font-size:28px">📊</div><div style="font-weight:600">Excel</div><div style="font-size:10px;color:var(--text3)">.xlsx</div></div><div class="export-btn" onclick="exportPDF()"><div style="font-size:28px">📄</div><div style="font-weight:600">PDF</div><div style="font-size:10px;color:var(--text3)">Imprimible</div></div></div></div>
+
   ${incS.length?`<div class="card"><div class="sec-title">💼 Fuentes de ingreso</div>${incS.map(([cat,amt])=>{const pct=inc>0?Math.round((amt/inc)*100):0;return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="font-size:18px">${cats[cat]||'💰'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">${cat}</span><span style="font-size:13px;font-weight:500;color:var(--green)">+${fmtS(amt)} ${pct}%</span></div><div class="pb" style="height:6px"><div class="pf" style="width:${pct}%;background:var(--green)"></div></div></div></div>`;}).join('')}</div>`:''}
   <div class="card"><div class="sec-title">🗂️ Gastos por categoría</div>${catS.map(([cat,amt])=>{const pct=tot>0?Math.round((amt/tot)*100):0;return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="font-size:18px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">${cat}</span><span style="font-size:13px;font-weight:500">${fmtS(amt)} ${pct}%</span></div><div class="pb" style="height:6px"><div class="pf" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div>
   <div class="card"><div class="sec-title">👥 Por persona</div>${S.users.map(u=>{const ue=S.transactions.filter(t=>Number(t.user)===Number(u.id)&&t.type==='expense').reduce((a,t)=>a+t.amount,0);const ui=S.transactions.filter(t=>Number(t.user)===Number(u.id)&&t.type==='income').reduce((a,t)=>a+t.amount,0);return`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border)"><div style="width:32px;height:32px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:white">${u.name[0]}</div><div style="flex:1;font-size:13px;font-weight:500">${u.name}</div><div style="text-align:right"><div style="font-size:12px;color:var(--green)">+${fmtS(ui)}</div><div style="font-size:12px;color:var(--red)">-${fmtS(ue)}</div></div></div>`;}).join('')}</div>
@@ -764,7 +764,8 @@ async function deleteDebt(id){if(!confirm('¿Eliminar esta deuda?'))return;S.deb
 function renderTransactionsWithComparator(){
   const{ml}=getStats('month');const ebyCat=getCatStats(ml,'expense');const totExp=ebyCat.reduce((a,[,v])=>a+v,0);const cats=getAllCats();
   const ch=ebyCat.length?`<div class="card" style="margin-bottom:12px"><div class="sec-title" onclick="toggleChart()" style="cursor:pointer;user-select:none">📊 Gastos por categoría <span id="chartArrow" style="font-size:12px;color:var(--accent);margin-left:4px">▼ ocultar</span></div><div id="chartBody">${ebyCat.slice(0,8).map(([cat,amt])=>{const pct=totExp>0?Math.round((amt/totExp)*100):0;return`<div class="cbar-wrap"><div style="width:28px;text-align:center;font-size:16px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>${cat}</span><span>${fmtS(amt)} (${pct}%)</span></div><div class="cbar-bg"><div class="cbar-fill" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div></div>`:'';
-  return`${ch}
+  const expBtns=`<div class="export-row" style="margin-bottom:12px"><div class="export-btn" onclick="openExportModal('excel')"><div style="font-size:22px">📊</div><div style="font-weight:600">Excel</div><div style="font-size:10px;color:var(--text3)">.xlsx · por fechas</div></div><div class="export-btn" onclick="openExportModal('pdf')"><div style="font-size:22px">📄</div><div style="font-weight:600">PDF</div><div style="font-size:10px;color:var(--text3)">Imprimible · por fechas</div></div></div>`;
+  return`${expBtns}${ch}
   <div class="tab-row" style="margin-bottom:8px">
     <div class="tab active" id="txSubTab" onclick="showTxSubTab('list',this)">Lista</div>
     <div class="tab" onclick="showTxSubTab('compare',this)">📊 Comparar</div>
@@ -839,23 +840,148 @@ function openMemberProfile(id){
 async function saveMemberRole(id){const role=document.getElementById('mRole').value;S.users=S.users.map(u=>Number(u.id)===Number(id)?{...u,role}:u);closeModal();render();showToast('💾 Guardando...');await pushAll();showToast('✅ Rol actualizado');}
 function removeMember(id){S.users=S.users.filter(u=>Number(u.id)!==Number(id));render();pushAll();}
 
-function exportExcel(){
-  const ws1=[['Fecha','Descripción','Tipo','Categoría','Monto CLP','Moneda','Pago','Tarjeta','Usuario']];
-  S.transactions.forEach(t=>ws1.push([t.date,t.desc,t.type==='income'?'Ingreso':t.type==='internal'?'Interno':'Gasto',t.category,t.type==='income'?t.amount:-t.amount,t.currency||'CLP',t.payType,t.tdcCard||'-',uname(t.user)]));
-  const{inc,exp,bal}=getStats('month');ws1.push([],[' RESUMEN'],['Ingresos','','','','',fmt(inc)],['Gastos','','','','',fmt(exp)],['Balance','','','','',fmt(bal)]);
-  const{ml}=getStats('month');const ws2=[['Categoría','Presupuesto','Gastado','Disponible','%']];
-  S.budgets.forEach(b=>{const s=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);ws2.push([b.category,b.limit,s,Math.max(0,b.limit-s),b.limit>0?Math.round((s/b.limit)*100)+'%':'N/A']);});
-  const wb=XLSX.utils.book_new();const wsa=XLSX.utils.aoa_to_sheet(ws1);wsa['!cols']=[{wch:12},{wch:28},{wch:10},{wch:16},{wch:14},{wch:10},{wch:14},{wch:18},{wch:14}];
-  XLSX.utils.book_append_sheet(wb,wsa,'Transacciones');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws2),'Presupuestos');
-  XLSX.writeFile(wb,`FamilyFinance_${new Date().toISOString().slice(0,10)}.xlsx`);
+function openExportModal(fmt){
+  const now=new Date();
+  const firstDay=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
+  const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().slice(0,10);
+  modal(`<div class="mtitle">${fmt==='excel'?'📊 Exportar Excel':'📄 Exportar PDF'}</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:14px">El reporte incluirá todos los movimientos del período, resumen de ingresos/gastos y detalle por categoría.</div>
+  <div class="fr">
+    <div class="fg"><label class="fl">Desde</label><input class="fi" id="expFrom" type="date" value="${firstDay}"></div>
+    <div class="fg"><label class="fl">Hasta</label><input class="fi" id="expTo" type="date" value="${lastDay}"></div>
+  </div>
+  <div class="fg"><label class="fl">Incluir en el reporte</label>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0">
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="expTx" checked style="width:18px;height:18px"> Detalle de movimientos</label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="expCats" checked style="width:18px;height:18px"> Gastos por categoría</label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="expInc" checked style="width:18px;height:18px"> Fuentes de ingreso</label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="expBud" checked style="width:18px;height:18px"> Estado de presupuestos</label>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px">${btnS('Cancelar','closeModal()','width:auto;flex:1')}<button onclick="doExport('${fmt}')" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background:#2563eb;color:#fff;">${fmt==='excel'?'📊 Descargar Excel':'📄 Generar PDF'}</button></div>`);
 }
-function exportPDF(){
-  const{inc,exp,bal}=getStats('month');const{ml}=getStats('month');
-  const rows=S.transactions.map(t=>`<tr><td>${t.date}</td><td>${t.desc}</td><td>${t.type==='income'?'Ingreso':t.type==='internal'?'Interno':'Gasto'}</td><td>${t.category}</td><td style="color:${t.type==='income'?'#16a34a':t.type==='internal'?'#0891b2':'#dc2626'};font-weight:600">${t.type==='income'?'+':t.type==='internal'?'⇄':'-'}${fmt(t.amount)}</td><td>${payLabel(t.payType)}</td><td>${uname(t.user)}</td></tr>`).join('');
-  const brows=S.budgets.map(b=>{const s=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const p=b.limit>0?Math.round((s/b.limit)*100):0;return`<tr><td>${b.category}</td><td>${fmt(b.limit)}</td><td>${fmt(s)}</td><td style="color:${p>=100?'#dc2626':p>=80?'#d97706':'#16a34a'};font-weight:600">${p}%</td></tr>`;}).join('');
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>FamilyFinance</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:900px;margin:0 auto}h1{color:#2563eb}h2{color:#1e40af;font-size:16px;margin:20px 0 10px;border-bottom:2px solid #e5e7eb;padding-bottom:6px}.sum{display:flex;gap:12px;margin:16px 0}.sc{flex:1;background:#f8f9fa;border-radius:8px;padding:12px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#2563eb;color:white;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #eee}</style></head><body><h1>💰 FamilyFinance — ${S.familyName}</h1><p>${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</p><div class="sum"><div class="sc"><small>Ingresos</small><div style="font-size:20px;font-weight:700;color:#16a34a">${fmt(inc)}</div></div><div class="sc"><small>Gastos</small><div style="font-size:20px;font-weight:700;color:#dc2626">${fmt(exp)}</div></div><div class="sc"><small>Balance</small><div style="font-size:20px;font-weight:700;color:#2563eb">${fmt(bal)}</div></div></div><h2>📋 Transacciones</h2><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Categoría</th><th>Monto</th><th>Pago</th><th>Usuario</th></tr></thead><tbody>${rows}</tbody></table><h2>🎯 Presupuestos</h2><table><thead><tr><th>Categoría</th><th>Límite</th><th>Gastado</th><th>%</th></tr></thead><tbody>${brows}</tbody></table></body></html>`;
-  const blob=new Blob([html],{type:'text/html'});const url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(w)setTimeout(()=>w.print(),800);
+
+function doExport(format){
+  const from=document.getElementById('expFrom').value;
+  const to=document.getElementById('expTo').value;
+  const inclTx=document.getElementById('expTx').checked;
+  const inclCats=document.getElementById('expCats').checked;
+  const inclInc=document.getElementById('expInc').checked;
+  const inclBud=document.getElementById('expBud').checked;
+  if(!from||!to){showToast('⚠️ Selecciona las fechas');return;}
+  const fromD=parseDate(from),toD=parseDate(to);toD.setHours(23,59,59);
+  const txs=S.transactions.filter(t=>{const d=parseDate(t.date);return d>=fromD&&d<=toD;}).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
+  const inc=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const exp=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
+  const bal=inc-exp;const sv=inc>0?Math.round((bal/inc)*100):0;
+  // Category stats
+  const catMap={};txs.filter(t=>t.type==='expense').forEach(t=>catMap[t.category]=(catMap[t.category]||0)+t.amount);
+  const catStats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const incMap={};txs.filter(t=>t.type==='income').forEach(t=>incMap[t.category]=(incMap[t.category]||0)+t.amount);
+  const incStats=Object.entries(incMap).sort((a,b)=>b[1]-a[1]);
+  const fromLbl=parseDate(from).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const toLbl=parseDate(to).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  closeModal();
+  if(format==='excel') doExportExcel(txs,inc,exp,bal,sv,catStats,incStats,inclTx,inclCats,inclInc,inclBud,fromLbl,toLbl,from,to);
+  else doExportPDF(txs,inc,exp,bal,sv,catStats,incStats,inclTx,inclCats,inclInc,inclBud,fromLbl,toLbl);
 }
+
+function doExportExcel(txs,inc,exp,bal,sv,catStats,incStats,inclTx,inclCats,inclInc,inclBud,fromLbl,toLbl,from,to){
+  const wb=XLSX.utils.book_new();
+  // Sheet 1: Summary
+  const ws0=[
+    ['REPORTE FAMILYFINANCE — '+S.familyName],['Período: '+fromLbl+' al '+toLbl],[''],
+    ['RESUMEN','',''],
+    ['Ingresos totales','',fmt(inc)],
+    ['Gastos totales','',fmt(exp)],
+    ['Balance','',fmt(bal)],
+    ['Tasa de ahorro','',sv+'%'],
+    ['Movimientos','',txs.length],
+  ];
+  const wsSummary=XLSX.utils.aoa_to_sheet(ws0);
+  wsSummary['!cols']=[{wch:30},{wch:10},{wch:18}];
+  XLSX.utils.book_append_sheet(wb,wsSummary,'Resumen');
+  // Sheet 2: Transactions
+  if(inclTx&&txs.length){
+    const ws1=[['Fecha','Descripción','Tipo','Categoría','Monto CLP','Moneda','Forma de pago','Tarjeta','Usuario']];
+    txs.forEach(t=>ws1.push([t.date,t.desc,t.type==='income'?'Ingreso':t.type==='internal'?'Interno':'Gasto',t.category,t.type==='income'?t.amount:-t.amount,t.currency||'CLP',t.payType,t.tdcCard||'-',uname(t.user)]));
+    const wsTx=XLSX.utils.aoa_to_sheet(ws1);wsTx['!cols']=[{wch:12},{wch:32},{wch:10},{wch:18},{wch:14},{wch:8},{wch:16},{wch:18},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,wsTx,'Movimientos');
+  }
+  // Sheet 3: Expenses by category
+  if(inclCats&&catStats.length){
+    const ws2=[['Categoría','Monto','% del total']];
+    catStats.forEach(([cat,amt])=>ws2.push([cat,amt,exp>0?Math.round((amt/exp)*100)+'%':'0%']));
+    ws2.push(['','',''],['TOTAL',exp,'100%']);
+    const wsC=XLSX.utils.aoa_to_sheet(ws2);wsC['!cols']=[{wch:22},{wch:14},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,wsC,'Gastos por categoría');
+  }
+  // Sheet 4: Income by source
+  if(inclInc&&incStats.length){
+    const ws3=[['Fuente de ingreso','Monto','% del total']];
+    incStats.forEach(([cat,amt])=>ws3.push([cat,amt,inc>0?Math.round((amt/inc)*100)+'%':'0%']));
+    ws3.push(['','',''],['TOTAL',inc,'100%']);
+    const wsI=XLSX.utils.aoa_to_sheet(ws3);wsI['!cols']=[{wch:22},{wch:14},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,wsI,'Fuentes de ingreso');
+  }
+  // Sheet 5: Budget status
+  if(inclBud&&S.budgets.length){
+    const ws4=[['Categoría','Presupuesto mensual','Gastado en período','Disponible','%']];
+    S.budgets.forEach(b=>{const s=txs.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);ws4.push([b.category,b.limit,s,Math.max(0,b.limit-s),b.limit>0?Math.round((s/b.limit)*100)+'%':'N/A']);});
+    const wsB=XLSX.utils.aoa_to_sheet(ws4);wsB['!cols']=[{wch:20},{wch:18},{wch:18},{wch:14},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,wsB,'Presupuestos');
+  }
+  XLSX.writeFile(wb,`FamilyFinance_${S.familyName}_${from}_${to}.xlsx`);
+  showToast('✅ Excel descargado');
+}
+
+function doExportPDF(txs,inc,exp,bal,sv,catStats,incStats,inclTx,inclCats,inclInc,inclBud,fromLbl,toLbl){
+  const cats=getAllCats();
+  const txRows=txs.map(t=>`<tr><td>${t.date}</td><td>${t.desc}</td><td style="color:${t.type==='income'?'#16a34a':t.type==='internal'?'#0891b2':'#dc2626'}">${t.type==='income'?'Ingreso':t.type==='internal'?'Interno':'Gasto'}</td><td>${t.category}</td><td style="color:${t.type==='income'?'#16a34a':t.type==='internal'?'#0891b2':'#dc2626'};font-weight:600;text-align:right">${t.type==='income'?'+':t.type==='internal'?'⇄':'-'}${fmt(t.amount)}</td><td>${payLabel(t.payType)}${t.tdcCard?' — '+t.tdcCard:''}</td><td>${uname(t.user)}</td></tr>`).join('');
+  const catRows=catStats.map(([cat,amt])=>{const pct=exp>0?Math.round((amt/exp)*100):0;const bar=Math.round(pct*1.5);return`<tr><td>${cats[cat]||'📦'} ${cat}</td><td style="text-align:right;font-weight:600">${fmt(amt)}</td><td style="text-align:right">${pct}%</td><td><div style="background:#e5e7eb;border-radius:3px;height:8px"><div style="width:${bar}px;max-width:150px;background:#2563eb;height:100%;border-radius:3px"></div></div></td></tr>`;}).join('');
+  const incRows=incStats.map(([cat,amt])=>{const pct=inc>0?Math.round((amt/inc)*100):0;return`<tr><td>${cats[cat]||'💰'} ${cat}</td><td style="text-align:right;font-weight:600;color:#16a34a">${fmt(amt)}</td><td style="text-align:right">${pct}%</td></tr>`;}).join('');
+  const budRows=S.budgets.map(b=>{const s=txs.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const p=b.limit>0?Math.round((s/b.limit)*100):0;return`<tr><td>${cats[b.category]||'📦'} ${b.category}</td><td style="text-align:right">${fmt(b.limit)}</td><td style="text-align:right;font-weight:600;color:${p>=100?'#dc2626':p>=80?'#d97706':'#16a34a'}">${fmt(s)}</td><td style="text-align:right;font-weight:600;color:${p>=100?'#dc2626':p>=80?'#d97706':'#16a34a'}">${p}%</td></tr>`;}).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>FamilyFinance — ${S.familyName}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:32px;color:#1a1a1a;max-width:960px;margin:0 auto}
+    h1{color:#1e40af;margin-bottom:4px}
+    .period{font-size:14px;color:#6b7280;margin-bottom:24px}
+    h2{color:#1e40af;font-size:15px;margin:28px 0 10px;border-bottom:2px solid #e5e7eb;padding-bottom:6px}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+    .sc{background:#f8faff;border:1px solid #dbeafe;border-radius:8px;padding:14px;text-align:center}
+    .sc-label{font-size:11px;color:#6b7280;margin-bottom:4px}
+    .sc-val{font-size:20px;font-weight:700}
+    table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}
+    th{background:#1e40af;color:white;padding:8px 10px;text-align:left;font-weight:600}
+    td{padding:7px 10px;border-bottom:1px solid #f3f4f6}
+    tr:nth-child(even) td{background:#f9fafb}
+    .footer{margin-top:32px;font-size:11px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:12px}
+    @media print{body{padding:16px}.no-print{display:none}}
+  </style></head><body>
+  <h1>💰 FamilyFinance — ${S.familyName}</h1>
+  <div class="period">📅 Período: <strong>${fromLbl}</strong> al <strong>${toLbl}</strong> · Generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</div>
+  <div class="summary">
+    <div class="sc"><div class="sc-label">💰 Ingresos</div><div class="sc-val" style="color:#16a34a">${fmt(inc)}</div></div>
+    <div class="sc"><div class="sc-label">💸 Gastos</div><div class="sc-val" style="color:#dc2626">${fmt(exp)}</div></div>
+    <div class="sc"><div class="sc-label">🏦 Balance</div><div class="sc-val" style="color:${bal>=0?'#1e40af':'#dc2626'}">${fmt(bal)}</div></div>
+    <div class="sc"><div class="sc-label">📈 Ahorro</div><div class="sc-val" style="color:${sv>=20?'#16a34a':sv>=10?'#d97706':'#dc2626'}">${sv}%</div></div>
+  </div>
+  ${inclCats&&catStats.length?`<h2>🗂️ Gastos por categoría</h2><table><thead><tr><th>Categoría</th><th style="text-align:right">Monto</th><th style="text-align:right">%</th><th>Distribución</th></tr></thead><tbody>${catRows}</tbody></table>`:''}
+  ${inclInc&&incStats.length?`<h2>💼 Fuentes de ingreso</h2><table><thead><tr><th>Fuente</th><th style="text-align:right">Monto</th><th style="text-align:right">%</th></tr></thead><tbody>${incRows}</tbody></table>`:''}
+  ${inclBud&&S.budgets.length?`<h2>🎯 Estado de presupuestos</h2><table><thead><tr><th>Categoría</th><th style="text-align:right">Presupuesto</th><th style="text-align:right">Gastado</th><th style="text-align:right">%</th></tr></thead><tbody>${budRows}</tbody></table>`:''}
+  ${inclTx&&txs.length?`<h2>📋 Detalle de movimientos (${txs.length})</h2><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Categoría</th><th style="text-align:right">Monto</th><th>Pago</th><th>Usuario</th></tr></thead><tbody>${txRows}</tbody></table>`:''}
+  <div class="footer">FamilyFinance · ${S.familyName} · ${fromLbl} – ${toLbl}</div>
+  <div class="no-print" style="margin-top:24px;text-align:center"><button onclick="window.print()" style="padding:12px 32px;background:#1e40af;color:white;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:600">🖨️ Imprimir / Guardar PDF</button></div>
+  </body></html>`;
+  const blob=new Blob([html],{type:'text/html'});const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');if(w)setTimeout(()=>w.print(),900);
+  showToast('✅ PDF generado');
+}
+
+// Keep legacy functions as wrappers for any remaining references
+function exportExcel(){openExportModal('excel');}
+function exportPDF(){openExportModal('pdf');}
+
 function closeModal(){const m=document.getElementById('addModal');if(m)m.remove();}
 function modal(html){const m=document.createElement('div');m.className='mbg';m.id='addModal';m.innerHTML=`<div class="modal"><div class="mhandle"></div>${html}</div>`;document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeModal();});}
 function openTxDetail(id){
