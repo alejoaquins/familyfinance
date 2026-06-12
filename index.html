@@ -130,8 +130,8 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .flash-saved{animation:flashGreen .7s ease forwards}
 .ob2-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:150;display:flex;align-items:flex-end;justify-content:center}
 .ob2-card{background:var(--bg2);border-radius:20px 20px 0 0;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom));width:100%;max-width:430px}
-.ob2-slides{display:flex;overflow:hidden;position:relative}
-.ob2-slide{min-width:100%;text-align:center;padding:0 8px;transition:transform .35s ease}
+.ob2-slides{position:relative;overflow:hidden;height:200px}
+.ob2-slide{position:absolute;top:0;left:0;width:100%;text-align:center;padding:0 8px;transition:transform .35s ease;will-change:transform}
 .ob2-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);display:inline-block;margin:0 3px;transition:background .2s}
 .ob2-dot.active{background:var(--accent)}
 .hint-banner{position:fixed;bottom:calc(70px + max(env(safe-area-inset-bottom),8px));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:45;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;background:var(--accent);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.4);animation:slideUp .3s ease;cursor:pointer}
@@ -257,15 +257,24 @@ function showOnboarding2(){
     </div>
     <button id="ob2btn" onclick="ob2Next()" style="width:100%;padding:14px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:15px;font-weight:600;cursor:pointer">Siguiente →</button>
   </div>`;
-  document.body.appendChild(el);ob2Current=0;ob2GoTo(0);
+  document.body.appendChild(el);ob2Current=0;requestAnimationFrame(()=>requestAnimationFrame(()=>ob2GoTo(0)));
 }
 function ob2GoTo(i){
   ob2Current=i;
-  const slides=document.querySelectorAll('.ob2-slide');
-  slides.forEach((s,idx)=>s.style.transform=`translateX(${(idx-i)*100}%)`);
-  document.querySelectorAll('.ob2-dot').forEach((d,idx)=>d.classList.toggle('active',idx===i));
+  const slides=document.querySelectorAll('#ob2 .ob2-slide');
+  slides.forEach((s,idx)=>{
+    s.style.transform=`translateX(${(idx-i)*100}%)`;
+    s.style.opacity=idx===i?'1':'0.5';
+  });
+  document.querySelectorAll('#ob2 .ob2-dot').forEach((d,idx)=>d.classList.toggle('active',idx===i));
   const btn=document.getElementById('ob2btn');
   if(btn)btn.textContent=i===OB_SLIDES.length-1?'¡Empezar! 🚀':'Siguiente →';
+  // Auto-adjust height to content
+  const active=slides[i];
+  if(active){
+    const wrap=document.querySelector('#ob2 .ob2-slides');
+    if(wrap)wrap.style.height=(active.scrollHeight||200)+'px';
+  }
 }
 function ob2Next(){
   if(ob2Current<OB_SLIDES.length-1){ob2GoTo(ob2Current+1);}
