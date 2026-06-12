@@ -231,11 +231,11 @@ function btnS(l,o,e=''){return`<button onclick="${o}" style="display:flex;align-
 function showToast(msg,dur=2500){document.querySelectorAll('.toast').forEach(t=>t.remove());const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),dur);}
 function setSS(s){const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText');if(!dot)return;dot.className='sync-dot sync-'+s;txt.textContent=s==='ok'?'Sincronizado':s==='loading'?'Sincronizando...':'Sin conexión';}
 function getBolsillos(){
-  const{inc,exp}=getStats('month');
-  const bal=inc-exp;
+  const{inc,expNoTDC,tdcPending}=getStats('month');
+  const bal=inc-expNoTDC;
   const ahorro=S.savings||0;
   const metas=Object.values(S.goalFunds||{}).reduce((a,v)=>a+v,0);
-  return{disponible:bal-ahorro-metas,ahorro,metas,total:bal};
+  return{disponible:bal-ahorro-metas,ahorro,metas,total:bal,tdcPending};
 }
 function openTransferencia(){
   const b=getBolsillos();
@@ -275,7 +275,7 @@ async function syncFromCloud(){
 }
 async function pushAll(){
   setSS('loading');
-  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},debts:S.debts||[],familyName:S.familyName,familyCode:S.familyCode,'X-Bin-Private':'false'});setSS('ok');}
+  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},debts:S.debts||[],familyName:S.familyName,familyCode:S.familyCode});setSS('ok');}
   catch(e){setSS('err');}
 }
 function addNotif(type,title,body){
@@ -362,7 +362,10 @@ function getStats(period){
   else if(period==='year'){txs=txs.filter(t=>parseDate(t.date).getFullYear()===y);}
   const inc=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
   const exp=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
-  return{inc,exp,bal:inc-exp,ml:txs};
+  // TDC expenses don't leave your account immediately — excluded from real balance
+  const expNoTDC=txs.filter(t=>t.type==='expense'&&t.payType!=='tdc').reduce((a,t)=>a+t.amount,0);
+  const tdcPending=txs.filter(t=>t.type==='expense'&&t.payType==='tdc').reduce((a,t)=>a+t.amount,0);
+  return{inc,exp,expNoTDC,tdcPending,bal:inc-expNoTDC,ml:txs};
 }
 function getCatStats(txs,type='expense'){const c={};txs.filter(t=>t.type===type).forEach(t=>c[t.category]=(c[t.category]||0)+t.amount);return Object.entries(c).sort((a,b)=>b[1]-a[1]);}
 function getBudgetAlerts(){const{ml}=getStats('month');return S.budgets.map(b=>{const s=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const p=b.limit>0?Math.round((s/b.limit)*100):0;if(p>=100)return{type:'danger',b,spent:s,pct:p};if(p>=80)return{type:'warn',b,spent:s,pct:p};return null;}).filter(Boolean);}
@@ -385,7 +388,7 @@ function txListHtml(txs){
   return html;
 }
 function renderHome(){
-  const{inc,exp,bal,ml}=getStats('month');const sv=inc>0?Math.round((bal/inc)*100):0;
+  const{inc,exp,expNoTDC,tdcPending,bal,ml}=getStats('month');const sv=inc>0?Math.round((bal/inc)*100):0;
   const bl=getBolsillos();const recent=S.transactions.slice(0,6);const cats=getAllCats();
   const bars=['Ene','Feb','Mar','Abr','May','Jun'].map((mo,i)=>{const v=[680000,720000,695000,810000,740000,exp];const h=Math.round((v[i]/Math.max(1,...v))*72);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center"><div style="height:${h}px;background:${i===5?'#2563eb':'var(--border2)'};width:100%;border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--text3);margin-top:4px">${mo}</div></div>`;}).join('');
   const incS=getCatStats(ml,'income');
@@ -419,7 +422,7 @@ function renderHome(){
     <div id="hBodyTxs" style="display:${HC.txs?'none':'block'};margin-top:8px">${recent.length?txListHtml(recent):'<div style="padding:20px;text-align:center;color:var(--text3)">Sin movimientos aún</div>'}</div>
   </div>`;
 
-  return`<div class="bal-card"><div class="bal-lbl">Balance total del mes</div><div class="bal-amt">${fmt(bl.total)}</div><div class="bal-row"><div class="bal-mini"><div class="bal-mini-lbl">↑ Ingresos</div><div class="bal-mini-val">${fmtS(inc)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">↓ Egresos</div><div class="bal-mini-val">${fmtS(exp)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">💾 Ahorro</div><div class="bal-mini-val">${sv}%</div></div></div></div>
+  return`<div class="bal-card"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="bal-lbl">Balance en cuenta</div><div class="bal-amt">${fmt(bal)}</div></div>${bl.tdcPending>0?`<div style="background:rgba(251,191,36,.25);border-radius:8px;padding:8px 10px;text-align:right"><div style="font-size:10px;opacity:.85;margin-bottom:2px">💳 TDC pendiente</div><div style="font-size:16px;font-weight:700;color:#fbbf24">${fmtS(bl.tdcPending)}</div></div>`:''}</div><div class="bal-row"><div class="bal-mini"><div class="bal-mini-lbl">↑ Ingresos</div><div class="bal-mini-val">${fmtS(inc)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">↓ Egresos reales</div><div class="bal-mini-val">${fmtS(expNoTDC)}</div></div><div class="bal-mini"><div class="bal-mini-lbl">💾 Ahorro</div><div class="bal-mini-val">${sv}%</div></div></div></div>
   <div class="bolsillos"><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">💳</div><div class="bolsillo-lbl">Disponible</div><div class="bolsillo-amt" style="color:var(--accent)">${fmtS(bl.disponible)}</div></div><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">🏦</div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div></div><div class="bolsillo" onclick="openTransferencia()"><div class="bolsillo-icon">⭐</div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div></div></div>
   <div style="margin-bottom:12px">${btnS('💸 Transferencia interna','openTransferencia()','font-size:13px;padding:9px')}</div>
   <div class="card"><div class="sec-title">📈 Gastos últimos 6 meses</div><div style="display:flex;align-items:flex-end;gap:4px;height:80px">${bars}</div></div>
@@ -446,11 +449,12 @@ function renderBudget(){
   ${btnP('+ Agregar presupuesto','openAddBudget()')}`;
 }
 function renderReports(){
-  const{inc,exp,bal,ml}=getStats('month');const sv=inc>0?Math.round((bal/inc)*100):0;
+  const{inc,exp,expNoTDC,tdcPending,bal,ml}=getStats('month');const sv=inc>0?Math.round((bal/inc)*100):0;
   const catS=getCatStats(ml,'expense');const tot=catS.reduce((a,[,v])=>a+v,0);const incS=getCatStats(ml,'income');const cats=getAllCats();
   const aiC=S.aiLoading?`<div style="text-align:center;padding:32px"><div class="loader"></div></div>`:S.aiRecs.length>0?S.aiRecs.map(r=>`<div class="ai-card"><div class="ai-card-header"><div class="ai-card-icon ${r.type}">${r.icon}</div><div class="ai-card-title">${r.title}</div><span class="ai-card-badge ${r.type}">${r.type==='save'?'Ahorro':r.type==='alert'?'Alerta':r.type==='increase'?'Presupuesto':'Análisis'}</span></div><div class="ai-card-body">${r.text}</div>${r.saving?`<div class="ai-card-saving">💡 ${r.saving}</div>`:''}</div>`).join(''):`<div style="text-align:center;padding:24px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">Recibe recomendaciones personalizadas</div>${btnP('✨ Analizar ahora','getAIAdvice()','width:auto;padding:10px 24px;margin:0 auto')}</div>`;
   return`<div class="tab-row"><div class="tab active" onclick="setRep('month',this)">Mes</div><div class="tab" onclick="setRep('week',this)">Semana</div><div class="tab" onclick="setRep('year',this)">Año</div></div>
-  <div class="sg"><div class="sc"><div class="sl">💰 Ingresos</div><div class="sv green">${fmtS(inc)}</div></div><div class="sc"><div class="sl">💸 Gastos</div><div class="sv red">${fmtS(exp)}</div></div><div class="sc"><div class="sl">🏦 Balance</div><div class="sv ${bal>=0?'green':'red'}">${fmtS(bal)}</div></div><div class="sc"><div class="sl">📈 Ahorro</div><div class="sv ${sv>=20?'green':sv>=10?'amber':'red'}">${sv}%</div></div></div>
+  <div class="sg"><div class="sc"><div class="sl">💰 Ingresos</div><div class="sv green">${fmtS(inc)}</div></div><div class="sc"><div class="sl">💸 Egresos reales</div><div class="sv red">${fmtS(expNoTDC)}</div></div><div class="sc"><div class="sl">🏦 Balance cuenta</div><div class="sv ${bal>=0?'green':'red'}">${fmtS(bal)}</div></div><div class="sc"><div class="sl">📈 Ahorro</div><div class="sv ${sv>=20?'green':sv>=10?'amber':'red'}">${sv}%</div></div></div>
+  ${tdcPending>0?`<div style="background:var(--amber-light);border:.5px solid var(--amber);border-radius:var(--rsm);padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--text)">💳 Gastos TDC pendientes de pago</span><span style="font-size:15px;font-weight:700;color:var(--amber)">${fmt(tdcPending)}</span></div>`:''}
 
   ${incS.length?`<div class="card"><div class="sec-title">💼 Fuentes de ingreso</div>${incS.map(([cat,amt])=>{const pct=inc>0?Math.round((amt/inc)*100):0;return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="font-size:18px">${cats[cat]||'💰'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">${cat}</span><span style="font-size:13px;font-weight:500;color:var(--green)">+${fmtS(amt)} ${pct}%</span></div><div class="pb" style="height:6px"><div class="pf" style="width:${pct}%;background:var(--green)"></div></div></div></div>`;}).join('')}</div>`:''}
   <div class="card"><div class="sec-title">🗂️ Gastos por categoría</div>${catS.map(([cat,amt])=>{const pct=tot>0?Math.round((amt/tot)*100):0;return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="font-size:18px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">${cat}</span><span style="font-size:13px;font-weight:500">${fmtS(amt)} ${pct}%</span></div><div class="pb" style="height:6px"><div class="pf" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div>
@@ -789,6 +793,9 @@ function renderSettings(){
   const qr=`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(APP_URL+'?code='+S.familyCode)}`;
   const isAdmin=S.currentUser.role==='admin';
   return`
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button onclick="syncFromCloud().then(()=>showToast('✅ Sincronizado'))" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:8px;border:.5px solid var(--accent);background:var(--accent-light);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">🔄 Sincronizar datos</button>
+  </div>
   <div class="card" style="border:1.5px solid var(--accent)">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:15px;font-weight:600">👨‍👩‍👧‍👦 ${S.familyName||'Mi Familia'}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Código e invitación</div></div>
