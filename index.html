@@ -67,7 +67,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .export-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;background:var(--bg3);border-radius:var(--rsm);border:.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2);font-weight:500}
 .tx-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .tx-type-card{padding:12px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);cursor:pointer;text-align:center;transition:all .15s}
-.tx-type-card.act-exp{border-color:var(--red);background:var(--red-light)}.tx-type-card.act-inc{border-color:var(--green);background:var(--green-light)}
+.tx-type-card.act-exp{border-color:var(--red);background:var(--red-light)}.tx-type-card.act-inc{border-color:var(--green);background:var(--green-light)}.tx-type-card.act-debt{border-color:var(--purple);background:var(--purple-light)}
 .ttc-icon{font-size:22px;margin-bottom:4px}.ttc-label{font-size:13px;font-weight:600}.ttc-sub{font-size:11px;color:var(--text2);margin-top:2px}
 .pay-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px}
 .pay-btn{padding:8px 4px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);cursor:pointer;text-align:center;font-size:11px;font-weight:500;color:var(--text2)}
@@ -363,7 +363,7 @@ function getStats(period){
   const inc=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
   const exp=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
   // TDC expenses don't leave your account immediately — excluded from real balance
-  const expNoTDC=txs.filter(t=>t.type==='expense'&&t.payType!=='tdc').reduce((a,t)=>a+t.amount,0);
+  const expNoTDC=txs.filter(t=>(t.type==='expense'&&t.payType!=='tdc')||t.type==='debtpay').reduce((a,t)=>a+t.amount,0);
   const tdcPending=txs.filter(t=>t.type==='expense'&&t.payType==='tdc').reduce((a,t)=>a+t.amount,0);
   return{inc,exp,expNoTDC,tdcPending,bal:inc-expNoTDC,ml:txs};
 }
@@ -374,9 +374,9 @@ const uname=id=>{const u=S.users.find(u=>Number(u.id)===Number(id));return u?u.n
 const ucolor=id=>{const u=S.users.find(u=>Number(u.id)===Number(id));return u?u.color:'#888';};
 function txHtml(t){
   const cats=getAllCats(),isInc=t.type==='income',isInt=t.type==='internal';
-  const ac=isInt?'int':isInc?'inc':'exp',pfx=isInt?'⇄':isInc?'+':'-';
+  const isDebt=t.type==='debtpay';const ac=isInt?'int':isInc?'inc':isDebt?'int':'exp',pfx=isInt?'⇄':isInc?'+':isDebt?'🏦':'-';
   return`<div class="tx-item" onclick="openTxDetail(${t.id})">
-    <div class="tx-icon" style="background:${isInt?'var(--teal-light)':isInc?'var(--green-light)':'var(--bg3)'}">${cats[t.category]||'📦'}</div>
+    <div class="tx-icon" style="background:${isInt?'var(--teal-light)':isInc?'var(--green-light)':isDebt?'var(--purple-light)':'var(--bg3)'}">${isDebt?'🏦':cats[t.category]||'📦'}</div>
     <div class="tx-info"><div class="tx-name">${t.desc}</div><div class="tx-meta"><span class="badge ${payBadgeClass(t.payType)}">${payLabel(t.payType)}</span><span class="badge b-cat">${t.category}</span></div><div style="font-size:11px;color:var(--text3);margin-top:2px"><span style="width:7px;height:7px;border-radius:50%;background:${ucolor(t.user)};display:inline-block;margin-right:4px"></span>${uname(t.user)}</div></div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><div class="tx-amt ${ac}">${pfx}${fmt(t.amount)}</div><div style="color:var(--text3);font-size:16px">›</div></div>
   </div>`;
@@ -693,7 +693,10 @@ function renderDebts(){
   // Auto-calculate TDC debt from registered cards
   const tdcAutoDebts=S.tdcCards.map(card=>{
     const{spent}=getTDCStats(card);
-    return{id:'tdc_'+card.id,nombre:card.name,tipo:'tdc',banco:'',saldo:spent,saldoOriginal:card.limit,cuota:spent,tasa:0,seguro:0,diaPago:card.payDay,fechaTermino:'',auto:true};
+    // Subtract debt payments made for this TDC
+    const paid=S.transactions.filter(t=>t.type==='debtpay'&&t.debtId==='tdc_'+card.id).reduce((a,t)=>a+t.amount,0);
+    const saldo=Math.max(0,spent-paid);
+    return{id:'tdc_'+card.id,nombre:card.name,tipo:'tdc',banco:'',saldo,saldoOriginal:card.limit,cuota:saldo,tasa:0,seguro:0,diaPago:card.payDay,fechaTermino:'',auto:true};
   }).filter(d=>d.saldo>0);
   const allDebts=[...tdcAutoDebts,...debts];
   const totalCuota=allDebts.reduce((a,d)=>a+(d.cuota||0),0);
@@ -1054,11 +1057,21 @@ function openAddTx(pre){
   curType=pre?.type||'expense';curPay=pre?.payType||(curType==='income'?'transfer':'tdd');
   const ec=Object.keys(getCats('expense')),ic=Object.keys(getCats('income'));
   modal(`<div class="mtitle">➕ Nuevo movimiento</div>
-  <div class="tx-type-grid"><div class="tx-type-card ${curType==='expense'?'act-exp':''}" id="cardExp" onclick="setType('expense')"><div class="ttc-icon">💸</div><div class="ttc-label" style="color:${curType==='expense'?'var(--red)':'var(--text2)'}">Gasto</div><div class="ttc-sub">Compras, servicios</div></div><div class="tx-type-card ${curType==='income'?'act-inc':''}" id="cardInc" onclick="setType('income')"><div class="ttc-icon">💰</div><div class="ttc-label" style="color:${curType==='income'?'var(--green)':'var(--text2)'}">Ingreso</div><div class="ttc-sub">Sueldo, honorarios</div></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+    <div class="tx-type-card ${curType==='expense'?'act-exp':''}" id="cardExp" onclick="setType('expense')"><div class="ttc-icon">💸</div><div class="ttc-label" style="color:${curType==='expense'?'var(--red)':'var(--text2)'}">Gasto</div><div class="ttc-sub">Compras</div></div>
+    <div class="tx-type-card ${curType==='income'?'act-inc':''}" id="cardInc" onclick="setType('income')"><div class="ttc-icon">💰</div><div class="ttc-label" style="color:${curType==='income'?'var(--green)':'var(--text2)'}">Ingreso</div><div class="ttc-sub">Sueldo</div></div>
+    <div class="tx-type-card ${curType==='debtpay'?'act-debt':''}" id="cardDebt" onclick="setType('debtpay')"><div class="ttc-icon">🏦</div><div class="ttc-label" style="color:${curType==='debtpay'?'var(--purple)':'var(--text2)'}">Pago deuda</div><div class="ttc-sub">TDC, crédito</div></div>
+  </div>
   <div class="fg"><label class="fl">Descripción</label><input class="fi" id="txD" placeholder="${curType==='income'?'Ej: Sueldo enero...':'Ej: Supermercado...'}" value="${pre?.desc||''}"></div>
   <div class="fr"><div class="fg"><label class="fl">Monto</label><input class="fi" id="txA" type="number" inputmode="decimal" placeholder="0" value="${pre?.amount||''}" oninput="updCur()"></div><div class="fg"><label class="fl">Moneda</label><select class="fs" id="txC" onchange="updCur()"><option>CLP</option><option>USD</option><option>EUR</option><option>UF</option><option>BRL</option></select></div></div>
   <div id="curInfo" style="font-size:12px;color:var(--accent);margin-bottom:10px;display:none"></div>
-  <div class="fg"><label class="fl">Categoría</label><select class="fs" id="txCat" onchange="checkCatBudget()">${(curType==='income'?ic:ec).map(c=>`<option ${pre?.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  <div class="fg" id="debtSelectorWrap" style="display:${curType==='debtpay'?'block':'none'}">
+    <label class="fl">¿Qué deuda estás pagando?</label>
+    <select class="fs" id="txDebtId">
+      ${[...S.tdcCards.map(c=>({id:'tdc_'+c.id,label:'💳 '+c.name+' (TDC)'})),...(S.debts||[]).map(d=>({id:'debt_'+d.id,label:(d.tipo==='hipotecario'?'🏠':'📋')+' '+d.nombre}))].map(x=>`<option value="${x.id}">${x.label}</option>`).join('')||'<option>Sin deudas registradas</option>'}
+    </select>
+  </div>
+  <div class="fg" id="catWrap" style="display:${curType==='debtpay'?'none':'block'}"><label class="fl">Categoría</label><select class="fs" id="txCat" onchange="checkCatBudget()">${(curType==='income'?ic:ec).map(c=>`<option ${pre?.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
   <div id="budgetWarn" style="display:none;margin-bottom:12px"></div>
   <div class="fg"><label class="fl">Forma de pago</label><div class="pay-grid" id="payGrid">${renderPayGrid(curType)}</div><div id="tdcWrap" style="display:${curPay==='tdc'?'block':'none'};margin-top:8px"><select class="fs" id="txTDC">${S.tdcCards.map(c=>`<option>${c.name}</option>`).join('')}</select></div></div>
   <div class="fr"><div class="fg"><label class="fl">Fecha</label><input class="fi" id="txDt" type="date" value="${pre?.date||today()}"></div><div class="fg"><label class="fl">Por</label><select class="fs" id="txU">${S.users.map(u=>`<option value="${u.id}" ${Number(u.id)===Number(S.currentUser.id)?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
@@ -1076,13 +1089,20 @@ function checkCatBudget(){
 function renderPayGrid(type){return(type==='income'?PAY_INC:PAY_EXP).map(p=>`<div class="pay-btn ${curPay===p.id?'active':''}" onclick="setPay('${p.id}',this)">${p.icon}<br>${p.label}</div>`).join('');}
 function setType(t){
   curType=t;curPay=t==='income'?'transfer':'tdd';
-  const ce=document.getElementById('cardExp'),ci=document.getElementById('cardInc');
+  const ce=document.getElementById('cardExp'),ci=document.getElementById('cardInc'),cd=document.getElementById('cardDebt');
   if(ce){ce.className='tx-type-card '+(t==='expense'?'act-exp':'');ce.querySelector('.ttc-label').style.color=t==='expense'?'var(--red)':'var(--text2)';}
   if(ci){ci.className='tx-type-card '+(t==='income'?'act-inc':'');ci.querySelector('.ttc-label').style.color=t==='income'?'var(--green)':'var(--text2)';}
-  const cs=document.getElementById('txCat');if(cs)cs.innerHTML=Object.keys(getCats(t)).map(c=>`<option>${c}</option>`).join('');
-  const pg=document.getElementById('payGrid');if(pg)pg.innerHTML=renderPayGrid(t);
+  if(cd){cd.className='tx-type-card '+(t==='debtpay'?'act-debt':'');cd.querySelector('.ttc-label').style.color=t==='debtpay'?'var(--purple)':'var(--text2)';}
+  // Show/hide debt selector vs category
+  const dsw=document.getElementById('debtSelectorWrap'),cw=document.getElementById('catWrap');
+  if(dsw)dsw.style.display=t==='debtpay'?'block':'none';
+  if(cw)cw.style.display=t==='debtpay'?'none':'block';
+  if(t!=='debtpay'){const cs=document.getElementById('txCat');if(cs)cs.innerHTML=Object.keys(getCats(t)).map(c=>`<option>${c}</option>`).join('');}
+  const pg=document.getElementById('payGrid');if(pg)pg.innerHTML=renderPayGrid(t==='debtpay'?'expense':t);
   const tw=document.getElementById('tdcWrap');if(tw)tw.style.display='none';
   const w=document.getElementById('budgetWarn');if(w)w.style.display='none';
+  // Update description placeholder
+  const desc=document.getElementById('txD');if(desc)desc.placeholder=t==='income'?'Ej: Sueldo enero...':t==='debtpay'?'Ej: Pago mensual, Abono extraordinario...':'Ej: Supermercado...';
 }
 function setPay(p,el){curPay=p;document.querySelectorAll('#payGrid .pay-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');const tw=document.getElementById('tdcWrap');if(tw)tw.style.display=p==='tdc'?'block':'none';}
 function updCur(){const c=document.getElementById('txC').value,a=parseFloat(document.getElementById('txA').value)||0,el=document.getElementById('curInfo');if(c!=='CLP'&&a>0){el.style.display='block';el.textContent=`≈ ${fmt(Math.round(a*RATES[c]))} CLP`;}else el.style.display='none';}
@@ -1090,6 +1110,18 @@ async function saveTx(){
   const desc=document.getElementById('txD').value.trim(),amtR=parseFloat(document.getElementById('txA').value)||0,cur=document.getElementById('txC').value;
   if(!desc||!amtR){showToast('⚠️ Completa descripción y monto');return;}
   const payType=curPay,tdcCard=payType==='tdc'&&document.getElementById('txTDC')?document.getElementById('txTDC').value:'';
+  // Debt payment — exits account, reduces debt saldo
+  if(curType==='debtpay'){
+    const debtId=document.getElementById('txDebtId')?.value;
+    const amt=Math.round(amtR*RATES[cur]);
+    const tx={id:Date.now(),type:'debtpay',amount:amt,currency:cur,desc,category:'Pago deuda',date:document.getElementById('txDt').value,user:parseInt(document.getElementById('txU').value),payType:'transfer',tdcCard:'',debtId};
+    S.transactions.push(tx);sortTx();
+    if(debtId&&debtId.startsWith('debt_')){const did=parseInt(debtId.replace('debt_',''));S.debts=(S.debts||[]).map(d=>Number(d.id)===Number(did)?{...d,saldo:Math.max(0,(d.saldo||0)-amt)}:d);}
+    closeModal();render();
+    addNotif('movement',`${uname(tx.user)} pagó una deuda`,`${desc} — ${fmt(tx.amount)} · ${tx.date}`);
+    await pushAll();showToast('✅ Pago registrado');playSound('expense');
+    return;
+  }
   const tx={id:Date.now(),type:curType,amount:Math.round(amtR*RATES[cur]),currency:cur,desc,category:document.getElementById('txCat').value,date:document.getElementById('txDt').value,user:parseInt(document.getElementById('txU').value),payType,tdcCard};
   S.transactions.push(tx);sortTx();closeModal();render();
   playSound(curType);
