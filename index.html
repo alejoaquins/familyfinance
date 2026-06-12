@@ -128,6 +128,23 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .search-box{width:100%;padding:10px 14px 10px 38px;border-radius:var(--rsm);border:.5px solid var(--border2);background:var(--bg);color:var(--text);font-size:15px;outline:none;-webkit-appearance:none}
 @keyframes flashGreen{0%{background:rgba(22,163,74,0)}30%{background:rgba(22,163,74,.15)}100%{background:transparent}}
 .flash-saved{animation:flashGreen .7s ease forwards}
+.ob2-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:150;display:flex;align-items:flex-end;justify-content:center}
+.ob2-card{background:var(--bg2);border-radius:20px 20px 0 0;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom));width:100%;max-width:430px}
+.ob2-slides{display:flex;overflow:hidden;position:relative}
+.ob2-slide{min-width:100%;text-align:center;padding:0 8px;transition:transform .35s ease}
+.ob2-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);display:inline-block;margin:0 3px;transition:background .2s}
+.ob2-dot.active{background:var(--accent)}
+.hint-banner{position:fixed;bottom:calc(70px + max(env(safe-area-inset-bottom),8px));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:45;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;background:var(--accent);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.4);animation:slideUp .3s ease;cursor:pointer}
+@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.hint-close{margin-left:auto;font-size:16px;opacity:.8}
+.empty-state{text-align:center;padding:40px 24px;color:var(--text2)}
+.empty-state-icon{font-size:52px;margin-bottom:12px}
+.empty-state-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
+.empty-state-sub{font-size:13px;margin-bottom:20px;line-height:1.5}
+.tooltip-wrap{position:relative;display:inline-block}
+.tooltip-box{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;font-size:11px;padding:6px 10px;border-radius:6px;white-space:nowrap;z-index:60;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.tooltip-box::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
+.sec-hint{font-size:11px;color:var(--text3);font-weight:400;margin-top:2px}
 </style><body>
 <div id="onboarding" style="display:none">
   <div class="ob-screen" id="obMain">
@@ -209,6 +226,89 @@ function sortTx(){S.transactions.sort((a,b)=>parseDate(b.date)-parseDate(a.date)
 function today(){return new Date().toISOString().slice(0,10);}
 function btnP(l,o,e=''){return`<button onclick="${o}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background:#2563eb;color:#fff;width:100%;${e}">${l}</button>`;}
 function btnS(l,o,e=''){return`<button onclick="${o}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;background:var(--bg3);color:var(--text);border:.5px solid var(--border2);width:100%;${e}">${l}</button>`;}
+
+// ── ONBOARDING SLIDES ──────────────────────────────────────────────────────
+const OB_SLIDES=[
+  {icon:'➕',title:'Registra tus movimientos',body:'Toca el botón <strong>+</strong> para agregar ingresos, gastos o pagos de deuda. Cada uno se sincroniza automáticamente con todos los miembros de la familia.'},
+  {icon:'💳',title:'Entiende los bolsillos',body:'<strong>Disponible</strong> = tu saldo libre.<br><strong>Ahorros</strong> = lo que apartaste.<br><strong>Metas</strong> = reservado para objetivos.<br>Son virtuales — te ayudan a organizar, no reflejan cuentas bancarias distintas.'},
+  {icon:'💳',title:'La TDC no descuenta de inmediato',body:'Cuando pagas con tarjeta de crédito, el dinero <strong>no sale de tu cuenta</strong> hasta que pagas la TDC. Por eso verás el monto en "TDC pendiente" en la tarjeta azul. Cuando registres el pago, ahí sí bajará tu saldo.'},
+  {icon:'🎯',title:'Presupuestos y alertas',body:'Define un límite mensual por categoría en la pestaña <strong>Presupuesto</strong>. Recibirás alertas al llegar al 80% y al 100%. Toca cualquier barra para ver opciones.'},
+  {icon:'🏦',title:'Tus TDC en Deudas',body:'Tus tarjetas de crédito aparecen <strong>automáticamente</strong> en la pestaña Deudas con el saldo del mes. Para hipotecarios o créditos de consumo, agrégalos manualmente con el botón "+".'},
+];
+let ob2Current=0;
+function showOnboarding2(){
+  if(localStorage.getItem('ff_ob2_done'))return;
+  document.querySelectorAll('.ob2-bg').forEach(x=>x.remove());
+  const el=document.createElement('div');el.className='ob2-bg';el.id='ob2';
+  el.innerHTML=`<div class="ob2-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:15px;font-weight:700;color:var(--text)">Bienvenido/a 👋</div>
+      <span onclick="closeOnboarding2()" style="font-size:13px;color:var(--text3);cursor:pointer">Saltar</span>
+    </div>
+    <div class="ob2-slides" id="ob2slides">
+      ${OB_SLIDES.map((s,i)=>`<div class="ob2-slide" id="ob2s${i}">
+        <div style="font-size:52px;margin-bottom:14px">${s.icon}</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:10px">${s.title}</div>
+        <div style="font-size:14px;color:var(--text2);line-height:1.6">${s.body}</div>
+      </div>`).join('')}
+    </div>
+    <div style="text-align:center;margin:20px 0 16px" id="ob2dots">
+      ${OB_SLIDES.map((_,i)=>`<span class="ob2-dot ${i===0?'active':''}" id="ob2d${i}"></span>`).join('')}
+    </div>
+    <button id="ob2btn" onclick="ob2Next()" style="width:100%;padding:14px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:15px;font-weight:600;cursor:pointer">Siguiente →</button>
+  </div>`;
+  document.body.appendChild(el);ob2Current=0;ob2GoTo(0);
+}
+function ob2GoTo(i){
+  ob2Current=i;
+  const slides=document.querySelectorAll('.ob2-slide');
+  slides.forEach((s,idx)=>s.style.transform=`translateX(${(idx-i)*100}%)`);
+  document.querySelectorAll('.ob2-dot').forEach((d,idx)=>d.classList.toggle('active',idx===i));
+  const btn=document.getElementById('ob2btn');
+  if(btn)btn.textContent=i===OB_SLIDES.length-1?'¡Empezar! 🚀':'Siguiente →';
+}
+function ob2Next(){
+  if(ob2Current<OB_SLIDES.length-1){ob2GoTo(ob2Current+1);}
+  else{closeOnboarding2();}
+}
+function closeOnboarding2(){localStorage.setItem('ff_ob2_done','1');const el=document.getElementById('ob2');if(el)el.remove();}
+
+// ── HINTS SYSTEM ────────────────────────────────────────────────────────────
+const HINTS={
+  home:'💡 Toca <strong>+</strong> para registrar tu primer ingreso o gasto',
+  transactions:'📋 Filtra por fecha o tipo · Busca cualquier movimiento',
+  budget:'🎯 Define límites mensuales por categoría · Toca una barra para ver opciones',
+  goals:'⭐ Crea metas de ahorro y registra abonos para alcanzarlas',
+  debts:'🏦 Tus TDC aparecen automáticamente · Agrega hipotecarios manualmente',
+  settings:'⚙️ Guarda tu código de familia · Compartelo para invitar miembros',
+};
+function showHint(tab){
+  const key='ff_hint_'+tab;if(localStorage.getItem(key))return;
+  document.querySelectorAll('.hint-banner').forEach(x=>x.remove());
+  const msg=HINTS[tab];if(!msg)return;
+  const el=document.createElement('div');el.className='hint-banner';
+  el.innerHTML=`<span style="flex:1">${msg}</span><span class="hint-close" onclick="dismissHint('${tab}',this.parentElement)">✕</span>`;
+  el.addEventListener('click',e=>{if(!e.target.classList.contains('hint-close'))dismissHint(tab,el);});
+  document.body.appendChild(el);
+  setTimeout(()=>{if(el.parentNode)dismissHint(tab,el);},6000);
+}
+function dismissHint(tab,el){localStorage.setItem('ff_hint_'+tab,'1');if(el&&el.parentNode)el.remove();}
+
+// ── BOLSILLO TOOLTIP ─────────────────────────────────────────────────────────
+const BOLSILLO_INFO={
+  disponible:{title:'💳 Disponible',body:'Tu saldo libre en cuenta.\nIngresos − egresos reales − ahorros − metas.\nEste dinero no está comprometido.'},
+  ahorro:{title:'🏦 Ahorros',body:'Dinero que apartaste manualmente.\nNo cuenta en el balance disponible.\nÚsalo como fondo de emergencia o ahorro libre.'},
+  metas:{title:'⭐ Metas',body:'Dinero reservado para objetivos específicos.\nCada meta tiene su propio fondo.\nNo lo uses hasta alcanzar la meta.'},
+};
+function showBolsilloInfo(key,e){
+  e.stopPropagation();
+  const info=BOLSILLO_INFO[key];if(!info)return;
+  modal(`<div class="mtitle">${info.title}</div>
+  <div style="font-size:14px;color:var(--text2);line-height:1.7;white-space:pre-line;margin-bottom:20px">${info.body}</div>
+  ${btnS('Entendido','closeModal()')}
+  <div style="margin-top:10px">${btnP('💸 Transferir desde aquí','closeModal();openTransferencia(\''+key+'\')')}</div>`);
+}
+
 function flashSaved(){const mc=document.getElementById('mainContent');if(mc){mc.classList.remove('flash-saved');void mc.offsetWidth;mc.classList.add('flash-saved');}}
 function showToast(msg,dur=2500){document.querySelectorAll('.toast').forEach(t=>t.remove());const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),dur);}
 function setSS(s){const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText');if(!dot)return;dot.className='sync-dot sync-'+s;txt.textContent=s==='ok'?'Sincronizado':s==='loading'?'Sincronizando...':'Sin conexión';}
@@ -322,7 +422,7 @@ async function recoverFamily(){
     sortTx();saveLocal();startApp();showToast('✅ Bienvenido/a, '+user.name);
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
-function startApp(){document.getElementById('onboarding').style.display='none';document.getElementById('mainApp').style.display='flex';document.getElementById('fabBtn').style.display='flex';applyTheme();syncFromCloud();if(syncInterval)clearInterval(syncInterval);syncInterval=setInterval(syncFromCloud,30000);}
+function startApp(){document.getElementById('onboarding').style.display='none';document.getElementById('mainApp').style.display='flex';document.getElementById('fabBtn').style.display='flex';applyTheme();syncFromCloud();if(syncInterval)clearInterval(syncInterval);syncInterval=setInterval(syncFromCloud,30000);setTimeout(showOnboarding2,800);}
 
 function getStats(period){
   const now=new Date(),m=now.getMonth(),y=now.getFullYear();let txs=S.transactions;
@@ -353,7 +453,7 @@ function txHtml(t){
   </div>`;
 }
 function txListHtml(txs){
-  if(!txs.length)return'<div style="text-align:center;padding:20px;color:var(--text3)">Sin movimientos</div>';
+  if(!txs.length)return`<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Sin movimientos</div><div class="empty-state-sub">No hay movimientos para el período seleccionado.</div></div>`;
   let html='',lastDate='';const td=today();const yd=new Date();yd.setDate(yd.getDate()-1);const yesterday=yd.toISOString().slice(0,10);
   txs.forEach(t=>{if(t.date!==lastDate){let label;if(t.date===td)label='Hoy';else if(t.date===yesterday)label='Ayer';else{const d=parseDate(t.date);label=d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});}html+=`<div class="date-sep">${label.charAt(0).toUpperCase()+label.slice(1)}</div>`;lastDate=t.date;}html+=txHtml(t);});
   return html;
@@ -425,21 +525,22 @@ function renderHome(){
     <div style="margin-top:8px;font-size:12px;opacity:.85">${ritmo.icon} ${ritmo.txt}</div>
   </div>
   <div class="bolsillos">
-    <div class="bolsillo" onclick="openTransferencia('disponible')"><div class="bolsillo-icon">💳</div><div class="bolsillo-lbl">Disponible</div><div class="bolsillo-amt" style="color:var(--accent)">${fmtS(bl.disponible)}</div><div style="font-size:9px;color:var(--accent);margin-top:2px">→ transferir</div></div>
-    <div class="bolsillo" onclick="openTransferencia('ahorro')"><div class="bolsillo-icon">🏦</div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div><div style="font-size:9px;color:var(--green);margin-top:2px">→ transferir</div></div>
-    <div class="bolsillo" onclick="openTransferencia('metas')"><div class="bolsillo-icon">⭐</div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div><div style="font-size:9px;color:var(--amber);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo" onclick="openTransferencia('disponible')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">💳</div><span onclick="showBolsilloInfo('disponible',event)" style="font-size:13px;color:rgba(37,99,235,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Disponible</div><div class="bolsillo-amt" style="color:var(--accent)">${fmtS(bl.disponible)}</div><div style="font-size:9px;color:var(--accent);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo" onclick="openTransferencia('ahorro')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">🏦</div><span onclick="showBolsilloInfo('ahorro',event)" style="font-size:13px;color:rgba(22,163,74,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div><div style="font-size:9px;color:var(--green);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo" onclick="openTransferencia('metas')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">⭐</div><span onclick="showBolsilloInfo('metas',event)" style="font-size:13px;color:rgba(217,119,6,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div><div style="font-size:9px;color:var(--amber);margin-top:2px">→ transferir</div></div>
   </div>
   <div style="margin-bottom:12px">${btnS('💸 Transferencia interna','openTransferencia()','font-size:13px;padding:9px')}</div>
   <div class="card"><div class="sec-title">📈 Gastos últimos 6 meses</div><div style="display:flex;align-items:flex-end;gap:4px;height:80px">${bars}</div></div>
   ${S.tdcCards.length?`<div class="card" style="border-left:3px solid var(--amber)"><div onclick="toggleHome('tdc')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none"><div class="sec-title" style="margin-bottom:0">💳 Tarjetas de Crédito</div><span id="hArrowTdc" style="font-size:12px;color:var(--accent)">${HC.tdc?'▶ mostrar':'▼ ocultar'}</span></div><div id="hBodyTdc" style="display:${HC.tdc?'none':'block'};margin-top:12px">${tdcRows}</div></div>`:''}
   ${incS.length?`<div class="card"><div onclick="toggleHome('income')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none"><div class="sec-title" style="margin-bottom:0">💼 Fuentes de ingreso</div><span id="hArrowIncome" style="font-size:12px;color:var(--accent)">${HC.income?'▶ mostrar':'▼ ocultar'}</span></div><div id="hBodyIncome" style="display:${HC.income?'none':'block'};margin-top:12px">${incS.map(([cat,amt])=>`<div class="is"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">${cats[cat]||'💰'}</span><span style="font-size:13px">${cat}</span></div><span style="font-size:13px;font-weight:600;color:var(--green)">+${fmtS(amt)}</span></div>`).join('')}</div></div>`:''}
-  <div class="card"><div onclick="toggleHome('txs')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:600;color:var(--text)">🕐 Últimos movimientos</span><span class="sec-link" onclick="event.stopPropagation();switchTab('transactions')" style="font-size:12px">Ver todos</span></div><span id="hArrowTxs" style="font-size:12px;color:var(--accent)">${HC.txs?'▶ mostrar':'▼ ocultar'}</span></div><div id="hBodyTxs" style="display:${HC.txs?'none':'block'};margin-top:8px">${recent.length?txListHtml(recent):'<div style="padding:20px;text-align:center;color:var(--text3)">Sin movimientos aún</div>'}</div></div>`;
+  <div class="card"><div onclick="toggleHome('txs')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:600;color:var(--text)">🕐 Últimos movimientos</span><span class="sec-link" onclick="event.stopPropagation();switchTab('transactions')" style="font-size:12px">Ver todos</span></div><span id="hArrowTxs" style="font-size:12px;color:var(--accent)">${HC.txs?'▶ mostrar':'▼ ocultar'}</span></div><div id="hBodyTxs" style="display:${HC.txs?'none':'block'};margin-top:8px">${recent.length?txListHtml(recent):'<div class="empty-state" style="padding:24px"><div class="empty-state-icon">💰</div><div class="empty-state-title">Sin movimientos aún</div><div class="empty-state-sub">Registra tu primer ingreso o gasto.</div><button onclick="openAddTx()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Registrar ahora</button></div>'}</div></div>`;
 }
 function renderTransactions(){
   const{ml}=getStats('month');const ebyCat=getCatStats(ml,'expense');const totExp=ebyCat.reduce((a,[,v])=>a+v,0);const cats=getAllCats();
+  const secHint=`<div class="sec-hint" style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">📋 Historial · 📊 Comparar períodos · 📅 Vista semanal · ⬇️ Exportar Excel y PDF</div>`;
   const chartHtml=ebyCat.length?`<div class="card" style="margin-bottom:12px"><div class="sec-title" onclick="toggleChart()" style="cursor:pointer;user-select:none">📊 Gastos por categoría <span id="chartArrow" style="font-size:12px;color:var(--accent);margin-left:4px">▼ ocultar</span></div><div id="chartBody">${ebyCat.slice(0,8).map(([cat,amt])=>{const pct=totExp>0?Math.round((amt/totExp)*100):0;return`<div class="cbar-wrap"><div style="width:28px;text-align:center;font-size:16px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>${cat}</span><span>${fmtS(amt)} (${pct}%)</span></div><div class="cbar-bg"><div class="cbar-fill" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div></div>`:'';
   const now=new Date();const defFrom=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);const defTo=now.toISOString().slice(0,10);
-  return`
+  return`${secHint}
   <div class="export-row" style="margin-bottom:12px"><div class="export-btn" onclick="openExportModal('excel')"><div style="font-size:22px">📊</div><div style="font-weight:600">Excel</div><div style="font-size:10px;color:var(--text3)">.xlsx · por fechas</div></div><div class="export-btn" onclick="openExportModal('pdf')"><div style="font-size:22px">📄</div><div style="font-weight:600">PDF</div><div style="font-size:10px;color:var(--text3)">Imprimible</div></div></div>
   ${chartHtml}
   <div class="tab-row" style="margin-bottom:8px">
@@ -482,8 +583,8 @@ function showTxSubTab(tab,el){
 function renderBudget(){
   const{ml}=getStats('month');const tB=S.budgets.reduce((a,b)=>a+b.limit,0);const tS=S.budgets.reduce((a,b)=>{const s=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((x,t)=>x+t.amount,0);return a+s;},0);const tp=tB>0?Math.min(100,Math.round((tS/tB)*100)):0;const ec=getCats('expense');
   const rows=S.budgets.map(b=>{const sp=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const pct=b.limit>0?Math.min(100,Math.round((sp/b.limit)*100)):0;const rem=Math.max(0,b.limit-sp);const col=pct>=100?'var(--red)':pct>=80?'var(--amber)':'var(--green)';return`<div class="bud-item"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="bud-name">${ec[b.category]||'📦'} ${b.category}</div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:${col}">${fmtS(sp)}</div><div style="font-size:10px;color:var(--text2)">de ${fmtS(b.limit)}</div></div><span onclick="editBudget(${b.id})" style="cursor:pointer">✏️</span><span onclick="delBudget(${b.id})" style="cursor:pointer;color:var(--red)">✕</span></div></div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:${col};font-weight:500">${pct}%</span><span style="font-size:11px;color:var(--text2)">Quedan ${fmt(rem)}</span></div><div class="pb" onclick="openBudgetAction(${b.id},'${b.category}',${sp},${b.limit},${pct})" style="cursor:pointer"><div class="pf" style="width:${pct}%;background:${col}"></div></div>${pct>=80?`<div style="font-size:11px;color:${col};margin-top:4px;cursor:pointer" onclick="openBudgetAction(${b.id},'${b.category}',${sp},${b.limit},${pct})">${pct>=100?'⚠️ Toca para ajustar':'🔶 Cerca del límite — toca para ver opciones'}</div>`:''}</div>`;}).join('');
-  return`<div class="card"><div class="sec-title">📊 Resumen del mes</div><div class="sg"><div class="sc"><div class="sl">Presupuestado</div><div class="sv">${fmtS(tB)}</div></div><div class="sc"><div class="sl">Gastado</div><div class="sv ${tp>=100?'red':tp>=80?'amber':'green'}">${fmtS(tS)}</div></div></div><div class="pb" style="height:10px"><div class="pf" style="width:${tp}%;background:${tp>=100?'var(--red)':tp>=80?'var(--amber)':'var(--accent)'}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${tp}% del presupuesto total</div></div>
-  <div class="card"><div class="sec-title">🎯 Por categoría <span style="font-size:11px;color:var(--text3);font-weight:400">Toca la barra para opciones</span></div>${rows||'<div style="padding:20px;text-align:center;color:var(--text3)">Sin presupuestos</div>'}</div>
+  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">🎯 Define límites por categoría · Recibe alertas al 80% y 100% · Toca una barra para ver opciones</div><div class="card"><div class="sec-title">📊 Resumen del mes</div><div class="sg"><div class="sc"><div class="sl">Presupuestado</div><div class="sv">${fmtS(tB)}</div></div><div class="sc"><div class="sl">Gastado</div><div class="sv ${tp>=100?'red':tp>=80?'amber':'green'}">${fmtS(tS)}</div></div></div><div class="pb" style="height:10px"><div class="pf" style="width:${tp}%;background:${tp>=100?'var(--red)':tp>=80?'var(--amber)':'var(--accent)'}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${tp}% del presupuesto total</div></div>
+  <div class="card"><div class="sec-title">🎯 Por categoría <span style="font-size:11px;color:var(--text3);font-weight:400">Toca la barra para opciones</span></div>${rows||'<div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-title">Sin presupuestos aún</div><div class="empty-state-sub">Define un límite mensual por categoría para controlar tus gastos y recibir alertas.</div><button onclick="openAddBudget()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Crear presupuesto</button></div>'}</div>
   ${btnP('+ Agregar presupuesto','openAddBudget()')}`;
 }
 function openBudgetAction(id,cat,spent,limit,pct){
@@ -530,7 +631,7 @@ async function getAIAdvice(){
 }
 function renderGoals(){
   const{bal}=getStats('month');
-  const gHtml=(S.goals||[]).length===0?`<div style="text-align:center;padding:32px;color:var(--text2)"><div style="font-size:48px;margin-bottom:12px">⭐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">Sin metas aún</div></div>`:(S.goals||[]).map(g=>{
+  const gHtml=(S.goals||[]).length===0?`<div class="empty-state"><div class="empty-state-icon">⭐</div><div class="empty-state-title">Sin metas aún</div><div class="empty-state-sub">Crea una meta de ahorro para un viaje, un auto, un fondo de emergencia o lo que quieras.</div><button onclick="openAddGoal()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Nueva meta</button></div>`:(S.goals||[]).map(g=>{
     const mL=Math.max(0,Math.round((parseDate(g.deadline)-new Date())/(1000*60*60*24*30)));
     const gf=(S.goalFunds||{})[g.id]||0;const saved=(Number(g.saved)||0)+gf;
     const pct=g.amount>0?Math.min(100,Math.round((saved/g.amount)*100)):0;
@@ -539,7 +640,7 @@ function renderGoals(){
     return`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px"><div><div style="font-size:16px;font-weight:600">${g.emoji||'⭐'} ${g.name}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Meta: ${fmt(g.amount)} · ${mL} meses</div></div><div style="display:flex;gap:8px"><span onclick="editGoal(${g.id})" style="cursor:pointer">✏️</span><span onclick="deleteGoal(${g.id})" style="cursor:pointer;color:var(--red)">✕</span></div></div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px;color:var(--text2)">Ahorrado: <strong>${fmt(saved)}</strong></span><span style="font-size:13px;font-weight:600;color:${col}">${pct}%</span></div><div class="pb" style="height:10px;margin-bottom:10px"><div class="pf" style="width:${pct}%;background:${col}"></div></div><div style="display:flex;background:var(--bg3);border-radius:var(--rsm);padding:10px"><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Falta</div><div style="font-size:13px;font-weight:600">${fmtS(need)}</div></div><div style="width:.5px;background:var(--border)"></div><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Necesitas/mes</div><div style="font-size:13px;font-weight:600;color:${mn>bal?'var(--red)':'var(--green)'}">${fmtS(mn)}</div></div><div style="width:.5px;background:var(--border)"></div><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Meses</div><div style="font-size:13px;font-weight:600">${mL}</div></div></div>${pct<100?`<button onclick="addSavingToGoal(${g.id})" style="width:100%;margin-top:10px;padding:10px;border-radius:8px;border:none;background:var(--accent-light);color:var(--accent);font-size:13px;font-weight:500;cursor:pointer">+ Registrar ahorro</button>`:`<div style="text-align:center;padding:10px;font-size:14px;font-weight:600;color:var(--green)">🎉 ¡Meta alcanzada!</div>`}</div>`;
   }).join('');
   const aiC=S.goalsAiLoading?`<div style="text-align:center;padding:24px"><div class="loader"></div></div>`:(S.goalsAiRecs||[]).length>0?(S.goalsAiRecs||[]).map(r=>`<div class="ai-card"><div class="ai-card-header"><div class="ai-card-icon ${r.type||'insight'}">${r.icon}</div><div class="ai-card-title">${r.title}</div><span class="ai-card-badge ${r.type||'insight'}">${r.type==='save'?'Ahorro':r.type==='alert'?'Alerta':'Análisis'}</span></div><div class="ai-card-body">${r.text}</div>${r.saving?`<div class="ai-card-saving">💡 ${r.saving}</div>`:''}</div>`).join(''):`<div style="text-align:center;padding:24px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">Análisis profundo de metas con montos reales</div>${btnP('✨ Analizar mis metas','analyzeGoals()','width:auto;padding:10px 24px;margin:0 auto')}</div>`;
-  return`<div style="margin-bottom:12px">${gHtml}</div>${btnP('+ Nueva meta','openAddGoal()')}<div style="margin-top:16px"><div class="ai-header"><div class="ai-avatar">🤖</div><div><div style="font-size:15px;font-weight:600">Análisis profundo IA</div><div style="font-size:12px;opacity:.8;margin-top:2px">¿Puedes alcanzar tus metas? ¿Qué recortar?</div></div></div>${(S.goalsAiRecs||[]).length>0&&!S.goalsAiLoading?`<div style="margin-bottom:10px">${btnP('🔄 Actualizar','analyzeGoals()')}</div>`:''}${aiC}</div>`;
+  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">⭐ Crea metas · Registra ahorros · Análisis IA de viabilidad</div><div style="margin-bottom:12px">${gHtml}</div>${btnP('+ Nueva meta','openAddGoal()')}<div style="margin-top:16px"><div class="ai-header"><div class="ai-avatar">🤖</div><div><div style="font-size:15px;font-weight:600">Análisis profundo IA</div><div style="font-size:12px;opacity:.8;margin-top:2px">¿Puedes alcanzar tus metas? ¿Qué recortar?</div></div></div>${(S.goalsAiRecs||[]).length>0&&!S.goalsAiLoading?`<div style="margin-bottom:10px">${btnP('🔄 Actualizar','analyzeGoals()')}</div>`:''}${aiC}</div>`;
 }
 async function analyzeGoals(){
   S.goalsAiLoading=true;S.goalsAiRecs=[];render();
@@ -594,9 +695,9 @@ function renderDebts(){
       <button onclick="openDebtPayment('${d.id}','${d.nombre}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--purple-light);color:var(--purple);font-size:13px;font-weight:600;cursor:pointer">💸 Registrar pago</button>
     </div>`;
   }).join('');
-  return`
+  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">🏦 TDC automáticas desde tus gastos · Hipotecarios y consumo manuales · Ratio deuda/ingreso en tiempo real</div>
   ${allDebts.length>0?`<div class="card" style="border-left:3px solid ${ratioCol}"><div class="sec-title">📊 Resumen de deudas</div><div class="sg"><div class="sc"><div class="sl">Cuota total/mes</div><div class="sv red">${fmtS(totalCuota)}</div></div><div class="sc"><div class="sl">Saldo total</div><div class="sv red">${fmtS(totalSaldo)}</div></div></div><div style="background:var(--bg3);border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;color:var(--text2)">Ratio deuda/ingreso</span><span style="font-size:16px;font-weight:700;color:${ratioCol}">${ratio}%</span></div><div class="pb" style="height:10px"><div class="pf" style="width:${Math.min(100,ratio)}%;background:${ratioCol}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${ratioLabel}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Recomendación: máximo 30% del ingreso</div></div></div>`:``}
-  ${debtCards||`<div style="text-align:center;padding:32px;color:var(--text2)"><div style="font-size:48px;margin-bottom:12px">🏦</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">Sin deudas registradas</div><div style="font-size:13px">Agrega tus créditos hipotecarios o de consumo</div></div>`}
+  ${debtCards||`<div class="empty-state"><div class="empty-state-icon">🏦</div><div class="empty-state-title">Sin créditos manuales</div><div class="empty-state-sub">Tus tarjetas TDC aparecen arriba automáticamente cuando tienen saldo. Para hipotecarios o créditos de consumo, agrégalos aquí.</div><button onclick="openAddDebt()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Agregar crédito</button></div>`}
   ${btnP('+ Agregar deuda','openAddDebt()')}`;
 }
 function openDebtPayment(debtId,debtName){
@@ -1006,7 +1107,7 @@ async function saveTx(){
   S.transactions.push(tx);sortTx();closeModal();render();
   addNotif('movement',`${uname(tx.user)} registró un ${curType==='income'?'Ingreso':'Gasto'}`,`${desc} — ${fmt(amt)} · ${tx.date}`);
   await pushAll();showToast('✅ Guardado');playSound(curType==='income'?'income':'expense');flashSaved();
-  if(curType==='expense'){const{ml}=getStats('month');const b=S.budgets.find(x=>x.category===tx.category);if(b){const sp=ml.filter(t=>t.type==='expense'&&t.category===tx.category).reduce((a,t)=>a+t.amount,0);if(b.limit>0&&Math.round((sp/b.limit)*100)>=100){addNotif('budget','Presupuesto agotado',`${tx.category}: ${fmt(sp)} de ${fmt(b.limit)}`);await pushAll();}}}
+  if(curType==='expense'){const{ml}=getStats('month');const b=S.budgets.find(x=>x.category===tx.category);if(b){const sp=ml.filter(t=>t.type==='expense'&&t.category===tx.category).reduce((a,t)=>a+t.amount,0);if(b.limit>0&&Math.round((sp/b.limit)*100)>=100){addNotif('budget','⚠️ Presupuesto agotado',`${tx.category}: gastaste ${fmt(sp)} de ${fmt(b.limit)}. Toca para ajustar el límite o ver los movimientos.`);await pushAll();}}}
 }
 
 function openAddBudget(ex){
@@ -1098,7 +1199,7 @@ function openAddUser(){modal(`<div class="mtitle">👤 Agregar miembro</div><div
 async function saveUser(){const n=document.getElementById('uN').value.trim(),r=document.getElementById('uR').value;if(!n){showToast('⚠️ Ingresa el nombre');return;}const colors=['#16a34a','#d97706','#7c3aed','#db2777','#059669'];if(!S.users)S.users=[];S.users.push({id:Date.now(),name:n,role:r,color:colors[S.users.length%colors.length]});closeModal();render();await pushAll();showToast('✅ Miembro agregado');}
 function applyTheme(){document.documentElement.classList.toggle('dark',S.dark);const btn=document.getElementById('themeBtn');if(btn)btn.textContent=S.dark?'☀️':'🌙';const fab=document.getElementById('fabBtn');if(fab){fab.style.backgroundColor=S.dark?'#f1f5f9':'#2563eb';fab.style.color=S.dark?'#1e293b':'#fff';fab.style.boxShadow=S.dark?'0 4px 20px rgba(0,0,0,.5)':'0 4px 20px rgba(37,99,235,.5)';}}
 function toggleTheme(){S.dark=!S.dark;applyTheme();saveLocal();}
-function switchTab(tab){S.tab=tab;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));document.getElementById('fabBtn').style.display=['home','transactions','budget','goals'].includes(tab)?'flex':'none';render();}
+function switchTab(tab){S.tab=tab;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));document.getElementById('fabBtn').style.display=['home','transactions','budget','goals'].includes(tab)?'flex':'none';render();setTimeout(()=>showHint(tab),400);;setTimeout(()=>showHint(tab),400);}
 function saveLocal(){try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod,goalsAiRecs:S.goalsAiRecs||[],savings:S.savings||0,goalFunds:S.goalFunds||{}}));}catch(e){}}
 function loadLocal(){try{const r=localStorage.getItem('ff_session');if(r){Object.assign(S,JSON.parse(r));return true;}}catch(e){}return false;}
 function render(){
