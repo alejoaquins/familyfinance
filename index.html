@@ -305,7 +305,7 @@ function dismissHint(tab,el){localStorage.setItem('ff_hint_'+tab,'1');if(el&&el.
 
 // ── BOLSILLO TOOLTIP ─────────────────────────────────────────────────────────
 const BOLSILLO_INFO={
-  disponible:{title:'💳 Disponible',body:'Tu saldo libre en cuenta.\nIngresos − egresos reales − ahorros − metas.\nEste dinero no está comprometido.'},
+
   ahorro:{title:'🏦 Ahorros',body:'Dinero que apartaste manualmente.\nNo cuenta en el balance disponible.\nÚsalo como fondo de emergencia o ahorro libre.'},
   metas:{title:'⭐ Metas',body:'Dinero reservado para objetivos específicos.\nCada meta tiene su propio fondo.\nNo lo uses hasta alcanzar la meta.'},
 };
@@ -318,6 +318,13 @@ function showBolsilloInfo(key,e){
   <div style="margin-top:10px">${btnP('💸 Transferir desde aquí','closeModal();openTransferencia(\''+key+'\')')}</div>`);
 }
 
+function showSecHint(msg){
+  const first=localStorage.getItem('ff_first_use');
+  if(!first){localStorage.setItem('ff_first_use',Date.now());}
+  const days=(Date.now()-parseInt(localStorage.getItem('ff_first_use')||Date.now()))/(1000*60*60*24);
+  if(days>7)return'';
+  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">${msg}</div>`;
+}
 function flashSaved(){const mc=document.getElementById('mainContent');if(mc){mc.classList.remove('flash-saved');void mc.offsetWidth;mc.classList.add('flash-saved');}}
 function showToast(msg,dur=2500){document.querySelectorAll('.toast').forEach(t=>t.remove());const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),dur);}
 function setSS(s){const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText');if(!dot)return;dot.className='sync-dot sync-'+s;txt.textContent=s==='ok'?'Sincronizado':s==='loading'?'Sincronizando...':'Sin conexión';}
@@ -368,13 +375,14 @@ function openNC(){
   document.querySelectorAll('.nc').forEach(x=>x.remove());
   const nc=document.createElement('div');nc.className='nc';
   const notifs=S.notifications||[];
-  nc.innerHTML=`<div class="nc-hdr"><div style="font-size:17px;font-weight:600;color:var(--text)">🔔 Notificaciones</div><div style="display:flex;gap:12px;align-items:center"><span onclick="markAllRead()" style="font-size:13px;color:var(--accent);cursor:pointer">Todo leído</span><span onclick="closeNC()" style="font-size:20px;cursor:pointer;color:var(--text2)">✕</span></div></div>
+  nc.innerHTML=`<div class="nc-hdr"><div style="font-size:17px;font-weight:600;color:var(--text)">🔔 Notificaciones</div><div style="display:flex;gap:12px;align-items:center"><span onclick="markAllRead()" style="font-size:13px;color:var(--accent);cursor:pointer">Todo leído</span><span onclick="clearAllNotifs()" style="font-size:13px;color:var(--red);cursor:pointer">Borrar todo</span><span onclick="closeNC()" style="font-size:20px;cursor:pointer;color:var(--text2)">✕</span></div></div>
   <div style="flex:1;overflow-y:auto;padding-bottom:32px">${notifs.length===0?`<div style="text-align:center;padding:48px 24px;color:var(--text3)"><div style="font-size:48px;margin-bottom:12px">🔔</div><div>Sin notificaciones</div></div>`:notifs.map(n=>{const st=niStyle(n);return`<div class="ni" id="ni-${n.id}" onclick="toggleNI(${n.id})" style="border-left:3px solid ${n.read?'var(--border)':st.border};background:${n.read?'var(--bg2)':st.bg};margin-bottom:4px"><div class="ni-hdr"><span style="font-size:16px">${st.icon}</span><div style="flex:1"><div style="font-size:13px;font-weight:${n.read?500:600};color:var(--text)">${n.title}</div><div style="display:flex;gap:6px;align-items:center;margin-top:2px"><span style="font-size:10px;background:var(--bg3);color:var(--text2);padding:1px 6px;border-radius:3px">${st.label}</span><span style="font-size:10px;color:var(--text3)">${n.date}</span></div></div>${n.read?'':'<span style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;display:inline-block"></span>'}<div style="font-size:14px;color:var(--text3)">›</div></div><div class="ni-body">${n.body}</div></div>`;}).join('')}</div>`;
   document.body.appendChild(nc);
   setTimeout(()=>{S.notifications=(S.notifications||[]).map(n=>({...n,read:true}));updateNBadge();pushAll();},2000);
 }
 function toggleNI(id){const el=document.getElementById('ni-'+id);if(el)el.classList.toggle('open');}
 function markAllRead(){S.notifications=(S.notifications||[]).map(n=>({...n,read:true}));updateNBadge();pushAll();closeNC();openNC();}
+function clearAllNotifs(){if(!confirm('¿Borrar todas las notificaciones?'))return;S.notifications=[];updateNBadge();pushAll();closeNC();}
 function closeNC(){const nc=document.querySelector('.nc');if(nc)nc.remove();}
 function showAppBanners(){
   const{ml}=getStats('month');const banners=[];
@@ -515,6 +523,10 @@ function renderHome(){
   const now2=new Date(),dayOfMonth=now2.getDate(),daysInMonth=new Date(now2.getFullYear(),now2.getMonth()+1,0).getDate();
   const monthPct=Math.round((dayOfMonth/daysInMonth)*100),expPct=inc>0?Math.round((expNoTDC/inc)*100):0;
   const ritmo=expPct<monthPct-15?{icon:'🟢',txt:'Ritmo de gasto controlado'}:expPct>monthPct+15?{icon:'🔴',txt:'Gastas más rápido de lo esperado'}:{icon:'🟡',txt:`Llevas el ${monthPct}% del mes — ritmo normal`};
+  // Días restantes y proyección
+  const _now=new Date(),_dim=new Date(_now.getFullYear(),_now.getMonth()+1,0).getDate();
+  const daysLeft=_dim-_now.getDate();const daysPassed=_now.getDate();
+  const dailyBurn=daysPassed>0?Math.round(expNoTDC/daysPassed):0;
   const bars=['Ene','Feb','Mar','Abr','May','Jun'].map((mo,i)=>{const v=[680000,720000,695000,810000,740000,exp];const h=Math.round((v[i]/Math.max(1,...v))*72);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center"><div style="height:${h}px;background:${i===5?'#2563eb':'var(--border2)'};width:100%;border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--text3);margin-top:4px">${mo}</div></div>`;}).join('');
   const HC=homeCollapse;
   const tdcRows=S.tdcCards.map(c=>{const{days,spent}=getTDCStats(c);const pct=Math.min(100,Math.round((spent/c.limit)*100));return`<div style="padding:10px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:13px;font-weight:500">💳 ${c.name}</div><div style="font-size:11px;color:var(--amber)">Corte en ${days} días</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:var(--amber)">${fmtS(spent)}</div><div style="font-size:10px;color:var(--text2)">${pct}% de ${fmtS(c.limit)}</div></div></div><div class="pb"><div class="pf" style="width:${pct}%;background:${pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)'}"></div></div></div>`;}).join('');
@@ -526,7 +538,7 @@ function renderHome(){
       <div>
         <div class="bal-lbl">Balance disponible</div>
         <div class="bal-amt">${fmt(bl.disponible)}</div>
-        <div style="font-size:12px;opacity:.7;margin-top:4px">Balance total: <span style="font-weight:600;opacity:1">${fmtS(bal)}</span></div>
+
       </div>
       ${bl.tdcPending>0?`<div style="background:rgba(251,191,36,.25);border-radius:8px;padding:8px 10px;text-align:right"><div style="font-size:10px;opacity:.85;margin-bottom:2px">💳 TDC pendiente</div><div style="font-size:16px;font-weight:700;color:#fbbf24">${fmtS(bl.tdcPending)}</div></div>`:''}
     </div>
@@ -534,7 +546,7 @@ function renderHome(){
     <div style="margin-top:8px;font-size:12px;opacity:.85">${ritmo.icon} ${ritmo.txt}</div>
   </div>
   <div class="bolsillos">
-    <div class="bolsillo" onclick="openTransferencia('disponible')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">💳</div><span onclick="showBolsilloInfo('disponible',event)" style="font-size:13px;color:rgba(37,99,235,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Disponible</div><div class="bolsillo-amt" style="color:var(--accent)">${fmtS(bl.disponible)}</div><div style="font-size:9px;color:var(--accent);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo"><div class="bolsillo-icon">📅</div><div class="bolsillo-lbl">Días restantes</div><div class="bolsillo-amt" style="color:${daysLeft<=5?'var(--red)':daysLeft<=10?'var(--amber)':'var(--text)'}">${daysLeft}d</div><div style="font-size:9px;color:var(--text3);margin-top:2px">~${fmtS(dailyBurn)}/día</div></div>
     <div class="bolsillo" onclick="openTransferencia('ahorro')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">🏦</div><span onclick="showBolsilloInfo('ahorro',event)" style="font-size:13px;color:rgba(22,163,74,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div><div style="font-size:9px;color:var(--green);margin-top:2px">→ transferir</div></div>
     <div class="bolsillo" onclick="openTransferencia('metas')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">⭐</div><span onclick="showBolsilloInfo('metas',event)" style="font-size:13px;color:rgba(217,119,6,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div><div style="font-size:9px;color:var(--amber);margin-top:2px">→ transferir</div></div>
   </div>
@@ -546,7 +558,7 @@ function renderHome(){
 }
 function renderTransactions(){
   const{ml}=getStats('month');const ebyCat=getCatStats(ml,'expense');const totExp=ebyCat.reduce((a,[,v])=>a+v,0);const cats=getAllCats();
-  const secHint=`<div class="sec-hint" style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">📋 Historial · 📊 Comparar períodos · 📅 Vista semanal · ⬇️ Exportar Excel y PDF</div>`;
+  const secHint=showSecHint('📋 Historial · 📊 Comparar períodos · 📅 Vista semanal · ⬇️ Exportar Excel y PDF');
   const chartHtml=ebyCat.length?`<div class="card" style="margin-bottom:12px"><div class="sec-title" onclick="toggleChart()" style="cursor:pointer;user-select:none">📊 Gastos por categoría <span id="chartArrow" style="font-size:12px;color:var(--accent);margin-left:4px">▼ ocultar</span></div><div id="chartBody">${ebyCat.slice(0,8).map(([cat,amt])=>{const pct=totExp>0?Math.round((amt/totExp)*100):0;return`<div class="cbar-wrap"><div style="width:28px;text-align:center;font-size:16px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>${cat}</span><span>${fmtS(amt)} (${pct}%)</span></div><div class="cbar-bg"><div class="cbar-fill" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div></div>`:'';
   const now=new Date();const defFrom=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);const defTo=now.toISOString().slice(0,10);
   return`${secHint}
@@ -556,6 +568,7 @@ function renderTransactions(){
     <div class="tab active" onclick="showTxSubTab('list',this)">Lista</div>
     <div class="tab" onclick="showTxSubTab('compare',this)">📊 Comparar</div>
     <div class="tab" onclick="showTxSubTab('weekly',this)">📅 Semanal</div>
+    <div class="tab" onclick="showTxSubTab('reports',this)">📈 Reportes</div>
   </div>
   <div id="txSubContent">${buildTxList()}</div>`;
 }
@@ -587,12 +600,14 @@ function showTxSubTab(tab,el){
   if(tab==='list')cont.innerHTML=buildTxList();
   else if(tab==='compare')cont.innerHTML=renderComparator();
   else if(tab==='weekly')cont.innerHTML=buildWeeklyView();
+  else if(tab==='reports')cont.innerHTML=renderReports();
+  else if(tab==='reports')cont.innerHTML=renderReports();
 }
 
 function renderBudget(){
   const{ml}=getStats('month');const tB=S.budgets.reduce((a,b)=>a+b.limit,0);const tS=S.budgets.reduce((a,b)=>{const s=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((x,t)=>x+t.amount,0);return a+s;},0);const tp=tB>0?Math.min(100,Math.round((tS/tB)*100)):0;const ec=getCats('expense');
   const rows=S.budgets.map(b=>{const sp=ml.filter(t=>t.type==='expense'&&t.category===b.category).reduce((a,t)=>a+t.amount,0);const pct=b.limit>0?Math.min(100,Math.round((sp/b.limit)*100)):0;const rem=Math.max(0,b.limit-sp);const col=pct>=100?'var(--red)':pct>=80?'var(--amber)':'var(--green)';return`<div class="bud-item"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="bud-name">${ec[b.category]||'📦'} ${b.category}</div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:${col}">${fmtS(sp)}</div><div style="font-size:10px;color:var(--text2)">de ${fmtS(b.limit)}</div></div><span onclick="editBudget(${b.id})" style="cursor:pointer">✏️</span><span onclick="delBudget(${b.id})" style="cursor:pointer;color:var(--red)">✕</span></div></div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:${col};font-weight:500">${pct}%</span><span style="font-size:11px;color:var(--text2)">Quedan ${fmt(rem)}</span></div><div class="pb" onclick="openBudgetAction(${b.id},'${b.category}',${sp},${b.limit},${pct})" style="cursor:pointer"><div class="pf" style="width:${pct}%;background:${col}"></div></div>${pct>=80?`<div style="font-size:11px;color:${col};margin-top:4px;cursor:pointer" onclick="openBudgetAction(${b.id},'${b.category}',${sp},${b.limit},${pct})">${pct>=100?'⚠️ Toca para ajustar':'🔶 Cerca del límite — toca para ver opciones'}</div>`:''}</div>`;}).join('');
-  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">🎯 Define límites por categoría · Recibe alertas al 80% y 100% · Toca una barra para ver opciones</div><div class="card"><div class="sec-title">📊 Resumen del mes</div><div class="sg"><div class="sc"><div class="sl">Presupuestado</div><div class="sv">${fmtS(tB)}</div></div><div class="sc"><div class="sl">Gastado</div><div class="sv ${tp>=100?'red':tp>=80?'amber':'green'}">${fmtS(tS)}</div></div></div><div class="pb" style="height:10px"><div class="pf" style="width:${tp}%;background:${tp>=100?'var(--red)':tp>=80?'var(--amber)':'var(--accent)'}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${tp}% del presupuesto total</div></div>
+  return`${showSecHint('🎯 Define límites por categoría · Recibe alertas al 80% y 100% · Toca una barra para ver opciones')}<div class="card"><div class="sec-title">📊 Resumen del mes</div><div class="sg"><div class="sc"><div class="sl">Presupuestado</div><div class="sv">${fmtS(tB)}</div></div><div class="sc"><div class="sl">Gastado</div><div class="sv ${tp>=100?'red':tp>=80?'amber':'green'}">${fmtS(tS)}</div></div></div><div class="pb" style="height:10px"><div class="pf" style="width:${tp}%;background:${tp>=100?'var(--red)':tp>=80?'var(--amber)':'var(--accent)'}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${tp}% del presupuesto total</div></div>
   <div class="card"><div class="sec-title">🎯 Por categoría <span style="font-size:11px;color:var(--text3);font-weight:400">Toca la barra para opciones</span></div>${rows||'<div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-title">Sin presupuestos aún</div><div class="empty-state-sub">Define un límite mensual por categoría para controlar tus gastos y recibir alertas.</div><button onclick="openAddBudget()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Crear presupuesto</button></div>'}</div>
   ${btnP('+ Agregar presupuesto','openAddBudget()')}`;
 }
@@ -649,7 +664,7 @@ function renderGoals(){
     return`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px"><div><div style="font-size:16px;font-weight:600">${g.emoji||'⭐'} ${g.name}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Meta: ${fmt(g.amount)} · ${mL} meses</div></div><div style="display:flex;gap:8px"><span onclick="editGoal(${g.id})" style="cursor:pointer">✏️</span><span onclick="deleteGoal(${g.id})" style="cursor:pointer;color:var(--red)">✕</span></div></div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px;color:var(--text2)">Ahorrado: <strong>${fmt(saved)}</strong></span><span style="font-size:13px;font-weight:600;color:${col}">${pct}%</span></div><div class="pb" style="height:10px;margin-bottom:10px"><div class="pf" style="width:${pct}%;background:${col}"></div></div><div style="display:flex;background:var(--bg3);border-radius:var(--rsm);padding:10px"><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Falta</div><div style="font-size:13px;font-weight:600">${fmtS(need)}</div></div><div style="width:.5px;background:var(--border)"></div><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Necesitas/mes</div><div style="font-size:13px;font-weight:600;color:${mn>bal?'var(--red)':'var(--green)'}">${fmtS(mn)}</div></div><div style="width:.5px;background:var(--border)"></div><div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text2)">Meses</div><div style="font-size:13px;font-weight:600">${mL}</div></div></div>${pct<100?`<button onclick="addSavingToGoal(${g.id})" style="width:100%;margin-top:10px;padding:10px;border-radius:8px;border:none;background:var(--accent-light);color:var(--accent);font-size:13px;font-weight:500;cursor:pointer">+ Registrar ahorro</button>`:`<div style="text-align:center;padding:10px;font-size:14px;font-weight:600;color:var(--green)">🎉 ¡Meta alcanzada!</div>`}</div>`;
   }).join('');
   const aiC=S.goalsAiLoading?`<div style="text-align:center;padding:24px"><div class="loader"></div></div>`:(S.goalsAiRecs||[]).length>0?(S.goalsAiRecs||[]).map(r=>`<div class="ai-card"><div class="ai-card-header"><div class="ai-card-icon ${r.type||'insight'}">${r.icon}</div><div class="ai-card-title">${r.title}</div><span class="ai-card-badge ${r.type||'insight'}">${r.type==='save'?'Ahorro':r.type==='alert'?'Alerta':'Análisis'}</span></div><div class="ai-card-body">${r.text}</div>${r.saving?`<div class="ai-card-saving">💡 ${r.saving}</div>`:''}</div>`).join(''):`<div style="text-align:center;padding:24px;background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border)"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">Análisis profundo de metas con montos reales</div>${btnP('✨ Analizar mis metas','analyzeGoals()','width:auto;padding:10px 24px;margin:0 auto')}</div>`;
-  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">⭐ Crea metas · Registra ahorros · Análisis IA de viabilidad</div><div style="margin-bottom:12px">${gHtml}</div>${btnP('+ Nueva meta','openAddGoal()')}<div style="margin-top:16px"><div class="ai-header"><div class="ai-avatar">🤖</div><div><div style="font-size:15px;font-weight:600">Análisis profundo IA</div><div style="font-size:12px;opacity:.8;margin-top:2px">¿Puedes alcanzar tus metas? ¿Qué recortar?</div></div></div>${(S.goalsAiRecs||[]).length>0&&!S.goalsAiLoading?`<div style="margin-bottom:10px">${btnP('🔄 Actualizar','analyzeGoals()')}</div>`:''}${aiC}</div>`;
+  return`${showSecHint('⭐ Crea metas · Registra ahorros · Análisis IA de viabilidad')}<div style="margin-bottom:12px">${gHtml}</div>${btnP('+ Nueva meta','openAddGoal()')}<div style="margin-top:16px"><div class="ai-header"><div class="ai-avatar">🤖</div><div><div style="font-size:15px;font-weight:600">Análisis profundo IA</div><div style="font-size:12px;opacity:.8;margin-top:2px">¿Puedes alcanzar tus metas? ¿Qué recortar?</div></div></div>${(S.goalsAiRecs||[]).length>0&&!S.goalsAiLoading?`<div style="margin-bottom:10px">${btnP('🔄 Actualizar','analyzeGoals()')}</div>`:''}${aiC}</div>`;
 }
 async function analyzeGoals(){
   S.goalsAiLoading=true;S.goalsAiRecs=[];render();
@@ -704,7 +719,7 @@ function renderDebts(){
       <button onclick="openDebtPayment('${d.id}','${d.nombre}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--purple-light);color:var(--purple);font-size:13px;font-weight:600;cursor:pointer">💸 Registrar pago</button>
     </div>`;
   }).join('');
-  return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">🏦 TDC automáticas desde tus gastos · Hipotecarios y consumo manuales · Ratio deuda/ingreso en tiempo real</div>
+  return`${showSecHint('🏦 TDC automáticas desde tus gastos · Hipotecarios y consumo manuales · Ratio deuda/ingreso en tiempo real')}
   ${allDebts.length>0?`<div class="card" style="border-left:3px solid ${ratioCol}"><div class="sec-title">📊 Resumen de deudas</div><div class="sg"><div class="sc"><div class="sl">Cuota total/mes</div><div class="sv red">${fmtS(totalCuota)}</div></div><div class="sc"><div class="sl">Saldo total</div><div class="sv red">${fmtS(totalSaldo)}</div></div></div><div style="background:var(--bg3);border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;color:var(--text2)">Ratio deuda/ingreso</span><span style="font-size:16px;font-weight:700;color:${ratioCol}">${ratio}%</span></div><div class="pb" style="height:10px"><div class="pf" style="width:${Math.min(100,ratio)}%;background:${ratioCol}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${ratioLabel}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Recomendación: máximo 30% del ingreso</div></div></div>`:``}
   ${debtCards||`<div class="empty-state"><div class="empty-state-icon">🏦</div><div class="empty-state-title">Sin créditos manuales</div><div class="empty-state-sub">Tus tarjetas TDC aparecen arriba automáticamente cuando tienen saldo. Para hipotecarios o créditos de consumo, agrégalos aquí.</div><button onclick="openAddDebt()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Agregar crédito</button></div>`}
   ${btnP('+ Agregar deuda','openAddDebt()')}`;
