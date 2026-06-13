@@ -5,12 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="FamilyFinance">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2563eb">
 <title>FamilyFinance</title>
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icons/icon-152x152.png">
 <style>
 :root{--bg:#fff;--bg2:#fff;--bg3:#f5f7fa;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.15);--accent:#2563eb;--accent-light:#eff6ff;--green:#16a34a;--green-light:#f0fdf4;--red:#dc2626;--red-light:#fef2f2;--amber:#d97706;--amber-light:#fffbeb;--purple:#7c3aed;--purple-light:#f5f3ff;--teal:#0891b2;--teal-light:#ecfeff;--radius:12px;--rsm:8px;--sh:0 2px 12px rgba(0,0,0,.06)}
 html.dark{--bg:#1a1f2e;--bg2:#242938;--bg3:#141824;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.15);--accent:#3b82f6;--accent-light:#1e3356;--green:#4ade80;--green-light:#052e16;--red:#f87171;--red-light:#2d0808;--amber:#fbbf24;--amber-light:#2d1b00;--purple:#a78bfa;--purple-light:#2e1065;--teal:#22d3ee;--teal-light:#083344;--sh:0 2px 12px rgba(0,0,0,.4)}
@@ -31,11 +27,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg3);color:var(--text)}
 .bal-row{display:flex;gap:8px;margin-top:12px}.bal-mini{flex:1;background:rgba(255,255,255,.15);border-radius:8px;padding:9px}
 .bal-mini-lbl{font-size:10px;opacity:.8;margin-bottom:2px}.bal-mini-val{font-size:13px;font-weight:600}
 .bolsillos{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-.bolsillo{background:var(--bg2);border-radius:var(--rsm);border:.5px solid var(--border);padding:10px;text-align:center;cursor:pointer;transition:all .15s}
-.bolsillo:active{transform:scale(.97)}.bolsillo-icon{font-size:20px;margin-bottom:3px}.bolsillo-lbl{font-size:10px;color:var(--text2);margin-bottom:2px}.bolsillo-amt{font-size:13px;font-weight:700}
+.bolsillo{background:var(--bg2);border-radius:var(--rsm);border:.5px solid var(--border);padding:10px;text-align:center;cursor:pointer}
+.bolsillo-icon{font-size:20px;margin-bottom:3px}.bolsillo-lbl{font-size:10px;color:var(--text2);margin-bottom:2px}.bolsillo-amt{font-size:13px;font-weight:700}
 .sec-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
 .sec-link{font-size:12px;color:var(--accent);font-weight:500;cursor:pointer}
-.tx-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:.5px solid var(--border);cursor:pointer;border-radius:6px}
+.tx-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:.5px solid var(--border);cursor:pointer}
 .tx-item:last-child{border-bottom:none}
 .tx-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .tx-info{flex:1;min-width:0}.tx-name{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -55,8 +51,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg3);color:var(--text)}
 .sl{font-size:11px;color:var(--text2);margin-bottom:4px}.sv{font-size:20px;font-weight:600;color:var(--text)}
 .sv.green{color:var(--green)}.sv.red{color:var(--red)}.sv.amber{color:var(--amber)}
 .pb{background:var(--bg3);border-radius:4px;height:8px;overflow:hidden}.pf{height:100%;border-radius:4px;transition:width .3s}
-.tab-row{display:flex;background:var(--bg3);border-radius:var(--rsm);padding:3px;margin-bottom:16px}
-.tab{flex:1;padding:8px;text-align:center;font-size:12px;border-radius:6px;cursor:pointer;color:var(--text2);font-weight:500}
+.tab-row{display:flex;background:var(--bg3);border-radius:var(--rsm);padding:3px;margin-bottom:12px;overflow-x:auto}
+.tab{flex:1;padding:8px 6px;text-align:center;font-size:11px;border-radius:6px;cursor:pointer;color:var(--text2);font-weight:500;white-space:nowrap}
 .tab.active{background:var(--bg2);color:var(--text);box-shadow:var(--sh)}
 .chip{display:inline-flex;align-items:center;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:500;background:var(--bg3);color:var(--text2);border:.5px solid var(--border);margin:2px;cursor:pointer}
 .chip.active{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
@@ -65,12 +61,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg3);color:var(--text)}
 .sw-sl:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s}
 input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:translateX(20px)}
 .bud-item{padding:14px 0;border-bottom:.5px solid var(--border)}.bud-item:last-child{border-bottom:none}
-.bud-name{font-size:14px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.export-row{display:flex;gap:8px;margin-bottom:4px}
+.bud-name{font-size:14px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px}
+.export-row{display:flex;gap:8px;margin-bottom:12px}
 .export-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px;background:var(--bg3);border-radius:var(--rsm);border:.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2);font-weight:500}
 .tx-type-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
 .tx-type-card{padding:11px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);cursor:pointer;text-align:center;transition:all .15s}
-.tx-type-card.act-exp{border-color:var(--red);background:var(--red-light)}.tx-type-card.act-inc{border-color:var(--green);background:var(--green-light)}.tx-type-card.act-debt{border-color:var(--purple);background:var(--purple-light)}
+.tx-type-card.act-exp{border-color:var(--red);background:var(--red-light)}
+.tx-type-card.act-inc{border-color:var(--green);background:var(--green-light)}
+.tx-type-card.act-debt{border-color:var(--purple);background:var(--purple-light)}
 .ttc-icon{font-size:20px;margin-bottom:3px}.ttc-label{font-size:12px;font-weight:600}.ttc-sub{font-size:10px;color:var(--text2);margin-top:1px}
 .pay-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px}
 .pay-btn{padding:8px 4px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);cursor:pointer;text-align:center;font-size:11px;font-weight:500;color:var(--text2)}
@@ -81,9 +79,9 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .ai-period-btn{flex-shrink:0;padding:7px 14px;border-radius:20px;border:.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer}
 .ai-period-btn.active{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
 .ai-card{background:var(--bg2);border-radius:var(--radius);border:.5px solid var(--border);overflow:hidden;margin-bottom:10px}
-.ai-card-header{display:flex;align-items:center;gap:10px;padding:14px 16px 10px}
-.ai-card-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-.ai-card-icon.save{background:var(--green-light)}.ai-card-icon.alert{background:var(--red-light)}.ai-card-icon.increase{background:var(--amber-light)}.ai-card-icon.insight{background:var(--accent-light)}
+.ai-card-hdr{display:flex;align-items:center;gap:10px;padding:14px 16px 10px}
+.ai-card-ico{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.ai-card-ico.save{background:var(--green-light)}.ai-card-ico.alert{background:var(--red-light)}.ai-card-ico.increase{background:var(--amber-light)}.ai-card-ico.insight{background:var(--accent-light)}
 .ai-card-title{font-size:14px;font-weight:600;color:var(--text);flex:1}
 .ai-card-badge{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:600}
 .ai-card-badge.save{background:var(--green-light);color:var(--green)}.ai-card-badge.alert{background:var(--red-light);color:var(--red)}.ai-card-badge.increase{background:var(--amber-light);color:var(--amber)}.ai-card-badge.insight{background:var(--accent-light);color:var(--accent)}
@@ -105,9 +103,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .banner{position:fixed;top:calc(56px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:80;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;animation:slideDown .3s ease}
 @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-.banner-warn{background:var(--amber-light);border:.5px solid var(--amber);color:var(--text)}
-.banner-danger{background:var(--red-light);border:.5px solid var(--red);color:var(--text)}
-.banner-info{background:var(--accent-light);border:.5px solid var(--accent);color:var(--text)}
+.banner-warn{background:var(--amber-light);border:.5px solid var(--amber)}.banner-danger{background:var(--red-light);border:.5px solid var(--red)}.banner-info{background:var(--accent-light);border:.5px solid var(--accent)}
 .banner-close{margin-left:auto;font-size:16px;cursor:pointer;opacity:.6;flex-shrink:0}
 .nc{position:fixed;inset:0;z-index:110;display:flex;flex-direction:column;background:var(--bg3)}
 .nc-hdr{background:var(--bg2);padding:16px;padding-top:calc(16px + env(safe-area-inset-top));border-bottom:.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -126,26 +122,19 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .is{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:.5px solid var(--border)}.is:last-child{border-bottom:none}
 .search-wrap{position:relative;margin-bottom:12px}.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
 .search-box{width:100%;padding:10px 14px 10px 38px;border-radius:var(--rsm);border:.5px solid var(--border2);background:var(--bg);color:var(--text);font-size:15px;outline:none;-webkit-appearance:none}
-@keyframes flashGreen{0%{background:rgba(22,163,74,0)}30%{background:rgba(22,163,74,.15)}100%{background:transparent}}
-.flash-saved{animation:flashGreen .7s ease forwards}
+.empty-state{text-align:center;padding:36px 24px;color:var(--text2)}
+.empty-icon{font-size:48px;margin-bottom:12px}.empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}.empty-sub{font-size:13px;margin-bottom:20px;line-height:1.5}
 .ob2-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:150;display:flex;align-items:flex-end;justify-content:center}
 .ob2-card{background:var(--bg2);border-radius:20px 20px 0 0;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom));width:100%;max-width:430px}
-.ob2-slides{position:relative;overflow:hidden;height:200px}
-.ob2-slide{position:absolute;top:0;left:0;width:100%;text-align:center;padding:0 8px;transition:transform .35s ease;will-change:transform}
+.ob2-slides{position:relative;overflow:hidden;height:190px}
+.ob2-slide{position:absolute;top:0;left:0;width:100%;text-align:center;padding:0 8px;transition:transform .35s ease}
 .ob2-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);display:inline-block;margin:0 3px;transition:background .2s}
 .ob2-dot.active{background:var(--accent)}
-.hint-banner{position:fixed;bottom:calc(70px + max(env(safe-area-inset-bottom),8px));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:45;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;background:var(--accent);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.4);animation:slideUp .3s ease;cursor:pointer}
-@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-.hint-close{margin-left:auto;font-size:16px;opacity:.8}
-.empty-state{text-align:center;padding:40px 24px;color:var(--text2)}
-.empty-state-icon{font-size:52px;margin-bottom:12px}
-.empty-state-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
-.empty-state-sub{font-size:13px;margin-bottom:20px;line-height:1.5}
-.tooltip-wrap{position:relative;display:inline-block}
-.tooltip-box{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;font-size:11px;padding:6px 10px;border-radius:6px;white-space:nowrap;z-index:60;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-.tooltip-box::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
-.sec-hint{font-size:11px;color:var(--text3);font-weight:400;margin-top:2px}
-</style><body>
+.hint-banner{position:fixed;bottom:calc(68px + max(env(safe-area-inset-bottom),8px));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:45;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;background:var(--accent);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.4);cursor:pointer}
+@keyframes flashGreen{0%{background:rgba(22,163,74,0)}30%{background:rgba(22,163,74,.15)}100%{background:transparent}}
+.flash-saved{animation:flashGreen .7s ease forwards}
+</style></head>
+<body>
 <div id="onboarding" style="display:none">
   <div class="ob-screen" id="obMain">
     <div class="ob-logo">💰</div><div class="ob-title">FamilyFinance</div>
@@ -185,7 +174,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
   <div class="hdr">
     <div><div class="hdr-title" id="hdrTitle">💰 FamilyFinance</div><div class="hdr-sub"><span class="sync-dot sync-ok" id="syncDot"></span><span id="syncText">Sincronizado</span></div></div>
     <div style="display:flex;gap:8px">
-      <div class="icon-btn" id="themeBtn">🌙</div>
+      <div class="icon-btn" id="themeBtn" onclick="toggleTheme()">🌙</div>
       <div class="icon-btn" onclick="openNC()">🔔<span class="nbadge" id="nbadge" style="display:none">0</span></div>
     </div>
   </div>
@@ -202,6 +191,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 <button id="fabBtn" onclick="openAddTx()" style="display:none;position:fixed;bottom:calc(62px + max(env(safe-area-inset-bottom),8px));right:16px;width:54px;height:54px;border-radius:50%;background:#2563eb;color:#fff;align-items:center;justify-content:center;font-size:26px;line-height:1;box-shadow:0 4px 20px rgba(37,99,235,.5);cursor:pointer;border:none;outline:none;z-index:40">+</button>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+
 
 const JKEY='$2a$10$WvSwHOqyqOCavbC.oSRUne60mu2Jo3wfmNXb4njKLXjbDJ.28rh5e';
 const JURL='https://api.jsonbin.io/v3/b';
@@ -850,7 +840,30 @@ function renderDebts(){
   ${(S.installments||[]).filter(i=>!i.paid).length>0?renderInstallmentsCard():''}` ;
 }
 function renderInstallmentsCard(){
-  return`<div class="card" style="margin-top:12px"><div class="sec-title">💳 Compras en cuotas activas</div>${(S.installments||[]).filter(i=>!i.paid).map(inst=>{const monthly=calcInstallmentAmount(inst);const paid=(S.transactions||[]).filter(t=>Number(t.installmentId)===Number(inst.id)).length;const remaining=inst.totalQuotas-paid;const pct=Math.round((paid/inst.totalQuotas)*100);return'<div style="padding:12px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><div style="font-size:14px;font-weight:600">💳 '+inst.desc+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+(inst.tdcCard||'TDC')+' · '+fmt(monthly)+'/mes · '+remaining+' cuotas restantes</div></div><span onclick="deleteInstallment('+inst.id+')" style="cursor:pointer;color:var(--red)">✕</span></div><div class="pb" style="height:6px"><div class="pf" style="width:'+pct+'%;background:var(--accent)"></div></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:4px"><span>Pagadas: '+paid+'/'+inst.totalQuotas+'</span><span>Total: '+fmt(inst.totalAmount)+'</span></div></div>';}).join('')+'</div>';}
+  const active=(S.installments||[]).filter(i=>!i.paid);
+  if(!active.length)return'';
+  const rows=active.map(inst=>{
+    const monthly=calcInstallmentAmount(inst);
+    const paid=(S.transactions||[]).filter(t=>Number(t.installmentId)===Number(inst.id)).length;
+    const remaining=inst.totalQuotas-paid;
+    const pct=Math.round((paid/inst.totalQuotas)*100);
+    return`<div style="padding:12px 0;border-bottom:.5px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:14px;font-weight:600">💳 ${inst.desc}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${inst.tdcCard||'TDC'} · ${fmt(monthly)}/mes · ${remaining} cuotas restantes</div>
+        </div>
+        <span onclick="deleteInstallment(${inst.id})" style="cursor:pointer;color:var(--red)">✕</span>
+      </div>
+      <div class="pb" style="height:6px"><div class="pf" style="width:${pct}%;background:var(--accent)"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:4px">
+        <span>Pagadas: ${paid}/${inst.totalQuotas}</span><span>Total: ${fmt(inst.totalAmount)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return`<div class="card" style="margin-top:12px"><div class="sec-title">💳 Compras en cuotas activas</div>${rows}</div>`;
+}
+
 function openDebtPayment(debtId,debtName){
   modal(`<div class="mtitle">💸 Pagar deuda</div>
   <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">🏦 ${debtName}</div>
@@ -1416,11 +1429,12 @@ document.addEventListener('touchend',e=>{if(!pulling){sy=0;return;}const d=e.cha
 })();
 // Init
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister()));caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)));}
-document.getElementById('themeBtn').addEventListener('click',toggleTheme);
+// themeBtn wired in HTML
 const urlCode=new URLSearchParams(window.location.search).get('code');if(urlCode){const el=document.getElementById('joinCode');if(el)el.value=urlCode;}
 const hasSession=loadLocal();applyTheme();
 if(hasSession&&S.familyCode){document.getElementById('onboarding').style.display='none';startApp();}
 else{document.getElementById('onboarding').style.display='flex';document.getElementById('onboarding').style.flexDirection='column';showOb('obMain');}
+
 </script>
 </body>
 </html>
