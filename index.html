@@ -217,7 +217,7 @@ const PAY_INC=[{id:'transfer',label:'Transferencia',icon:'📲'},{id:'cash',labe
 function payLabel(p){const f=[...PAY_EXP,...PAY_INC].find(x=>x.id===p);return f?f.icon+' '+f.label:p||'-';}
 function payBadgeClass(p){if(p==='tdc')return'b-tdc';if(p==='tdd')return'b-tdd';if(p==='transfer')return'b-trans';if(p==='cash')return'b-cash';return'b-cat';}
 const RATES={CLP:1,USD:950,EUR:1040,UF:38000,BRL:188,ARS:1};
-let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[]};
+let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],installments:[]};
 let syncInterval=null,shownBanners=new Set(),activeDateFilter='month';
 const fmt=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n);
 const fmtS=n=>n>=1000000?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+n;
@@ -325,6 +325,129 @@ function showSecHint(msg){
   if(days>7)return'';
   return`<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--rsm)">${msg}</div>`;
 }
+
+// ══════════════════════════════════════════════════════
+// CUOTAS — Motor de generación automática
+// ══════════════════════════════════════════════════════
+function calcInstallmentAmount(inst){
+  if(inst.rateType==='flat'||!inst.rate||inst.rate===0){
+    return Math.round(inst.totalAmount/inst.totalQuotas);
+  }
+  // Cuota con interés: fórmula cuota francesa
+  const r=inst.rate/100;
+  return Math.round(inst.totalAmount*(r*Math.pow(1+r,inst.totalQuotas))/(Math.pow(1+r,inst.totalQuotas)-1));
+}
+function getInstallmentMonth(inst,quotaNum){
+  // Returns YYYY-MM-DD for quota N (1-based)
+  const d=new Date(inst.startDate);
+  d.setMonth(d.getMonth()+(quotaNum-1));
+  return d.toISOString().slice(0,10);
+}
+function generateInstallmentTx(inst,quotaNum){
+  const amt=calcInstallmentAmount(inst);
+  const date=getInstallmentMonth(inst,quotaNum);
+  return{
+    id:Date.now()+Math.random(),
+    type:'expense',
+    amount:amt,
+    currency:'CLP',
+    desc:`${inst.desc} (cuota ${quotaNum}/${inst.totalQuotas})`,
+    category:inst.category||'Tarjeta de crédito',
+    date,
+    user:inst.user||S.currentUser.id,
+    payType:'tdc',
+    tdcCard:inst.tdcCard||'',
+    installmentId:inst.id,
+    quotaNum,
+    auto:true
+  };
+}
+function processInstallments(){
+  // Run on app load — generate missing quota transactions for past/current months
+  if(!S.installments||!S.installments.length)return false;
+  const now=new Date();
+  let changed=false;
+  S.installments.forEach(inst=>{
+    if(inst.paid)return;
+    for(let q=1;q<=inst.totalQuotas;q++){
+      const qDate=new Date(getInstallmentMonth(inst,q));
+      // Only generate if month has passed or is current
+      if(qDate>new Date(now.getFullYear(),now.getMonth()+1,0))continue;
+      // Check if already generated
+      const exists=S.transactions.some(t=>t.installmentId===inst.id&&t.quotaNum===q);
+      if(!exists){
+        S.transactions.push(generateInstallmentTx(inst,q));
+        changed=true;
+      }
+    }
+    // Mark as paid if all quotas generated and past due date
+    const lastDate=new Date(getInstallmentMonth(inst,inst.totalQuotas));
+    if(lastDate<now){
+      const allGenerated=Array.from({length:inst.totalQuotas},(_,i)=>i+1).every(q=>S.transactions.some(t=>t.installmentId===inst.id&&t.quotaNum===q));
+      if(allGenerated){inst.paid=true;changed=true;}
+    }
+  });
+  if(changed){sortTx();}
+  return changed;
+}
+function openAddInstallment(preDesc,preCat,preTdc){
+  const tdcOpts=S.tdcCards.map(c=>`<option value="${c.name}" ${preTdc===c.name?'selected':''}>${c.name}</option>`).join('')||'<option>Sin tarjetas registradas</option>';
+  modal(`<div class="mtitle">💳 Compra en cuotas</div>
+  <div class="fg"><label class="fl">Descripción</label><input class="fi" id="instDesc" placeholder="Ej: iPhone, Refrigerador, Viaje..." value="${preDesc||''}"></div>
+  <div class="fr"><div class="fg"><label class="fl">Monto total (CLP)</label><input class="fi" id="instTotal" type="number" inputmode="decimal" placeholder="0" oninput="updateInstPreview()"></div><div class="fg"><label class="fl">Número de cuotas</label><input class="fi" id="instQuotas" type="number" inputmode="numeric" min="2" max="60" placeholder="12" oninput="updateInstPreview()"></div></div>
+  <div class="fg"><label class="fl">Tipo de cuota</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
+      <div id="instFlatBtn" class="tx-type-card act-inc" onclick="setInstType('flat')" style="padding:10px"><div style="font-size:18px;margin-bottom:3px">📋</div><div style="font-size:12px;font-weight:600;color:var(--green)">Cuota fija</div><div style="font-size:10px;color:var(--text2)">sin interés</div></div>
+      <div id="instRateBtn" class="tx-type-card" onclick="setInstType('rate')" style="padding:10px"><div style="font-size:18px;margin-bottom:3px">📈</div><div style="font-size:12px;font-weight:600;color:var(--text2)">Con interés</div><div style="font-size:10px;color:var(--text2)">tasa mensual</div></div>
+    </div>
+  </div>
+  <div id="instRateWrap" style="display:none" class="fg"><label class="fl">Tasa de interés mensual (%)</label><input class="fi" id="instRate" type="number" inputmode="decimal" step="0.1" placeholder="1.5" oninput="updateInstPreview()"></div>
+  <div class="fr"><div class="fg"><label class="fl">Tarjeta TDC</label><select class="fs" id="instTdc">${tdcOpts}</select></div><div class="fg"><label class="fl">Primera cuota</label><input class="fi" id="instStart" type="date" value="${today()}"></div></div>
+  <div class="fg"><label class="fl">Categoría</label><select class="fs" id="instCat">${Object.keys(getCats('expense')).map(c=>`<option ${(preCat||'Tarjeta de crédito')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  <div id="instPreview" style="background:var(--accent-light);border-radius:var(--rsm);padding:12px;margin-bottom:14px;font-size:13px;color:var(--text);display:none"></div>
+  <div style="display:flex;gap:10px">${btnS('Cancelar','closeModal()','width:auto;flex:1')}<button onclick="saveInstallment()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background:#2563eb;color:#fff;">Crear cuotas</button></div>`);
+  window._instType='flat';
+}
+function setInstType(type){
+  window._instType=type;
+  const fb=document.getElementById('instFlatBtn'),rb=document.getElementById('instRateBtn'),rw=document.getElementById('instRateWrap');
+  if(fb){fb.className='tx-type-card '+(type==='flat'?'act-inc':'');fb.querySelector('div:nth-child(2)').style.color=type==='flat'?'var(--green)':'var(--text2)';}
+  if(rb){rb.className='tx-type-card '+(type==='rate'?'act-inc':'');rb.querySelector('div:nth-child(2)').style.color=type==='rate'?'var(--green)':'var(--text2)';}
+  if(rw)rw.style.display=type==='rate'?'block':'none';
+  updateInstPreview();
+}
+function updateInstPreview(){
+  const total=parseInt(document.getElementById('instTotal')?.value)||0;
+  const quotas=parseInt(document.getElementById('instQuotas')?.value)||0;
+  const rate=parseFloat(document.getElementById('instRate')?.value)||0;
+  const prev=document.getElementById('instPreview');if(!prev)return;
+  if(!total||!quotas){prev.style.display='none';return;}
+  const inst={totalAmount:total,totalQuotas:quotas,rate,rateType:window._instType||'flat'};
+  const monthly=calcInstallmentAmount(inst);
+  const totalPay=monthly*quotas;
+  const interest=totalPay-total;
+  prev.style.display='block';
+  prev.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>💳 Cuota mensual</span><strong>${fmt(monthly)}</strong></div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>📅 Total a pagar</span><strong>${fmt(totalPay)}</strong></div>${interest>0?`<div style="display:flex;justify-content:space-between;color:var(--red)"><span>💸 Intereses totales</span><strong>+${fmt(interest)}</strong></div>`:''}`;
+}
+async function saveInstallment(){
+  const desc=document.getElementById('instDesc').value.trim();
+  const total=parseInt(document.getElementById('instTotal').value)||0;
+  const quotas=parseInt(document.getElementById('instQuotas').value)||0;
+  const rate=parseFloat(document.getElementById('instRate')?.value)||0;
+  const tdcCard=document.getElementById('instTdc')?.value||'';
+  const startDate=document.getElementById('instStart').value;
+  const category=document.getElementById('instCat').value;
+  if(!desc||!total||!quotas||!startDate){showToast('⚠️ Completa todos los campos');return;}
+  const inst={id:Date.now(),desc,totalAmount:total,totalQuotas:quotas,rate,rateType:window._instType||'flat',tdcCard,startDate,category,user:S.currentUser.id,paid:false,createdAt:today()};
+  if(!S.installments)S.installments=[];
+  S.installments.push(inst);
+  const changed=processInstallments();
+  closeModal();render();
+  showToast('💾 Guardando...');await pushAll();
+  const monthly=calcInstallmentAmount(inst);
+  showToast(`✅ ${quotas} cuotas de ${fmt(monthly)} creadas`);
+}
+
 function flashSaved(){const mc=document.getElementById('mainContent');if(mc){mc.classList.remove('flash-saved');void mc.offsetWidth;mc.classList.add('flash-saved');}}
 function showToast(msg,dur=2500){document.querySelectorAll('.toast').forEach(t=>t.remove());const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),dur);}
 function setSS(s){const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText');if(!dot)return;dot.className='sync-dot sync-'+s;txt.textContent=s==='ok'?'Sincronizado':s==='loading'?'Sincronizando...':'Sin conexión';}
@@ -350,12 +473,13 @@ async function syncFromCloud(){
     if(typeof data.savings==='number')S.savings=data.savings;
     if(data.goalFunds)S.goalFunds=data.goalFunds;
     if(data.debts)S.debts=data.debts;
-    sortTx();saveLocal();setSS('ok');updateNBadge();render();showAppBanners();
+    if(data.installments)S.installments=data.installments;
+    sortTx();const instChanged=processInstallments();if(instChanged)pushAll();saveLocal();setSS('ok');updateNBadge();render();showAppBanners();
   }catch(e){setSS('err');}
 }
 async function pushAll(){
   setSS('loading');
-  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},debts:S.debts||[],familyName:S.familyName,familyCode:S.familyCode});setSS('ok');}
+  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},debts:S.debts||[],installments:S.installments||[],familyName:S.familyName,familyCode:S.familyCode});setSS('ok');}
   catch(e){setSS('err');}
 }
 function addNotif(type,title,body){
@@ -407,7 +531,7 @@ async function createFamily(){
     const r=await fetch(JURL,{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':JKEY,'X-Bin-Private':'false'},body:JSON.stringify({transactions:[],users:[user],budgets:defB,tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],familyName:fn})});
     if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const binId=d.metadata.id;
     localStorage.setItem('ff_binId',binId);
-    Object.assign(S,{familyCode:binId,familyName:fn,currentUser:user,users:[user],budgets:defB,transactions:[],tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[]});
+    Object.assign(S,{familyCode:binId,familyName:fn,currentUser:user,users:[user],budgets:defB,transactions:[],tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],installments:[]});
     saveLocal();startApp();
   }catch(e){showOb('obMain');showToast('❌ Error: '+e.message);}
 }
@@ -422,7 +546,7 @@ async function joinFamily(){
     fd.users=[...(fd.users||[]),user];
     await fetch(`${JURL}/${code}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JKEY},body:JSON.stringify(fd)});
     localStorage.setItem('ff_binId',code);
-    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users,transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[]});
+    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users,transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[],installments:fd.installments||[]});
     sortTx();saveLocal();startApp();
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
@@ -435,7 +559,7 @@ async function recoverFamily(){
     const existing=(fd.users||[]).find(u=>u.name.toLowerCase()===name.toLowerCase());let user;
     if(existing){user=existing;}else{const colors=['#2563eb','#16a34a','#d97706','#7c3aed','#db2777'];user={id:Date.now(),name,role:'member',color:colors[(fd.users||[]).length%colors.length]};fd.users=[...(fd.users||[]),user];await fetch(`${JURL}/${code}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JKEY},body:JSON.stringify(fd)});}
     localStorage.setItem('ff_binId',code);
-    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users||[],transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[]});
+    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users||[],transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[],installments:fd.installments||[]});
     sortTx();saveLocal();startApp();showToast('✅ Bienvenido/a, '+user.name);
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
@@ -546,9 +670,9 @@ function renderHome(){
     <div style="margin-top:8px;font-size:12px;opacity:.85">${ritmo.icon} ${ritmo.txt}</div>
   </div>
   <div class="bolsillos">
-    <div class="bolsillo"><div class="bolsillo-icon">📅</div><div class="bolsillo-lbl">Días restantes</div><div class="bolsillo-amt" style="color:${daysLeft<=5?'var(--red)':daysLeft<=10?'var(--amber)':'var(--text)'}">${daysLeft}d</div><div style="font-size:9px;color:var(--text3);margin-top:2px">~${fmtS(dailyBurn)}/día</div></div>
-    <div class="bolsillo" onclick="openTransferencia('ahorro')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">🏦</div><span onclick="showBolsilloInfo('ahorro',event)" style="font-size:13px;color:rgba(22,163,74,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div><div style="font-size:9px;color:var(--green);margin-top:2px">→ transferir</div></div>
-    <div class="bolsillo" onclick="openTransferencia('metas')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="bolsillo-icon">⭐</div><span onclick="showBolsilloInfo('metas',event)" style="font-size:13px;color:rgba(217,119,6,.5);line-height:1">ℹ</span></div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div><div style="font-size:9px;color:var(--amber);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo"><div class="bolsillo-icon">📊</div><div class="bolsillo-lbl">Balance real</div><div class="bolsillo-amt" style="color:${bal>=0?'var(--green)':'var(--red)'}">${fmtS(bal)}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">ingresos − egresos</div></div>
+    <div class="bolsillo" onclick="openTransferencia('ahorro')"><div class="bolsillo-icon">🏦</div><div class="bolsillo-lbl">Ahorros</div><div class="bolsillo-amt" style="color:var(--green)">${fmtS(bl.ahorro)}</div><div style="font-size:9px;color:var(--green);margin-top:2px">→ transferir</div></div>
+    <div class="bolsillo" onclick="openTransferencia('metas')"><div class="bolsillo-icon">⭐</div><div class="bolsillo-lbl">Metas</div><div class="bolsillo-amt" style="color:var(--amber)">${fmtS(bl.metas)}</div><div style="font-size:9px;color:var(--amber);margin-top:2px">→ transferir</div></div>
   </div>
   <div style="margin-bottom:12px">${btnS('💸 Transferencia interna','openTransferencia()','font-size:13px;padding:9px')}</div>
   <div class="card"><div class="sec-title">📈 Gastos últimos 6 meses</div><div style="display:flex;align-items:flex-end;gap:4px;height:80px">${bars}</div></div>
@@ -558,7 +682,7 @@ function renderHome(){
 }
 function renderTransactions(){
   const{ml}=getStats('month');const ebyCat=getCatStats(ml,'expense');const totExp=ebyCat.reduce((a,[,v])=>a+v,0);const cats=getAllCats();
-  const secHint=showSecHint('📋 Historial · 📊 Comparar períodos · 📅 Vista semanal · ⬇️ Exportar Excel y PDF');
+  const secHint='';
   const chartHtml=ebyCat.length?`<div class="card" style="margin-bottom:12px"><div class="sec-title" onclick="toggleChart()" style="cursor:pointer;user-select:none">📊 Gastos por categoría <span id="chartArrow" style="font-size:12px;color:var(--accent);margin-left:4px">▼ ocultar</span></div><div id="chartBody">${ebyCat.slice(0,8).map(([cat,amt])=>{const pct=totExp>0?Math.round((amt/totExp)*100):0;return`<div class="cbar-wrap"><div style="width:28px;text-align:center;font-size:16px">${cats[cat]||'📦'}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>${cat}</span><span>${fmtS(amt)} (${pct}%)</span></div><div class="cbar-bg"><div class="cbar-fill" style="width:${pct}%;background:var(--accent)"></div></div></div></div>`;}).join('')}</div></div>`:'';
   const now=new Date();const defFrom=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);const defTo=now.toISOString().slice(0,10);
   return`${secHint}
@@ -722,8 +846,11 @@ function renderDebts(){
   return`${showSecHint('🏦 TDC automáticas desde tus gastos · Hipotecarios y consumo manuales · Ratio deuda/ingreso en tiempo real')}
   ${allDebts.length>0?`<div class="card" style="border-left:3px solid ${ratioCol}"><div class="sec-title">📊 Resumen de deudas</div><div class="sg"><div class="sc"><div class="sl">Cuota total/mes</div><div class="sv red">${fmtS(totalCuota)}</div></div><div class="sc"><div class="sl">Saldo total</div><div class="sv red">${fmtS(totalSaldo)}</div></div></div><div style="background:var(--bg3);border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;color:var(--text2)">Ratio deuda/ingreso</span><span style="font-size:16px;font-weight:700;color:${ratioCol}">${ratio}%</span></div><div class="pb" style="height:10px"><div class="pf" style="width:${Math.min(100,ratio)}%;background:${ratioCol}"></div></div><div style="font-size:11px;color:var(--text2);margin-top:6px">${ratioLabel}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Recomendación: máximo 30% del ingreso</div></div></div>`:``}
   ${debtCards||`<div class="empty-state"><div class="empty-state-icon">🏦</div><div class="empty-state-title">Sin créditos manuales</div><div class="empty-state-sub">Tus tarjetas TDC aparecen arriba automáticamente cuando tienen saldo. Para hipotecarios o créditos de consumo, agrégalos aquí.</div><button onclick="openAddDebt()" style="padding:10px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer">➕ Agregar crédito</button></div>`}
-  ${btnP('+ Agregar deuda','openAddDebt()')}`;
+  <div style="display:flex;gap:8px;margin-top:4px">${btnP('+ Agregar crédito','openAddDebt()','flex:1')}${btnS('💳 Compra en cuotas','openAddInstallment()','flex:1;font-size:13px')}</div>
+  ${(S.installments||[]).filter(i=>!i.paid).length>0?renderInstallmentsCard():''}` ;
 }
+function renderInstallmentsCard(){
+  return`<div class="card" style="margin-top:12px"><div class="sec-title">💳 Compras en cuotas activas</div>${(S.installments||[]).filter(i=>!i.paid).map(inst=>{const monthly=calcInstallmentAmount(inst);const paid=(S.transactions||[]).filter(t=>Number(t.installmentId)===Number(inst.id)).length;const remaining=inst.totalQuotas-paid;const pct=Math.round((paid/inst.totalQuotas)*100);return'<div style="padding:12px 0;border-bottom:.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><div style="font-size:14px;font-weight:600">💳 '+inst.desc+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+(inst.tdcCard||'TDC')+' · '+fmt(monthly)+'/mes · '+remaining+' cuotas restantes</div></div><span onclick="deleteInstallment('+inst.id+')" style="cursor:pointer;color:var(--red)">✕</span></div><div class="pb" style="height:6px"><div class="pf" style="width:'+pct+'%;background:var(--accent)"></div></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:4px"><span>Pagadas: '+paid+'/'+inst.totalQuotas+'</span><span>Total: '+fmt(inst.totalAmount)+'</span></div></div>';}).join('')+'</div>';}
 function openDebtPayment(debtId,debtName){
   modal(`<div class="mtitle">💸 Pagar deuda</div>
   <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">🏦 ${debtName}</div>
@@ -759,6 +886,12 @@ async function saveDebt(eid){
   if(!S.debts)S.debts=[];
   if(eid)S.debts=S.debts.map(d=>Number(d.id)===Number(eid)?debt:d);else S.debts.push(debt);
   closeModal();render();showToast('💾 Guardando...');await pushAll();showToast('✅ Deuda guardada');
+}
+function deleteInstallment(id){
+  if(!confirm('¿Eliminar esta compra en cuotas?\nSe eliminarán también las cuotas generadas.'))return;
+  S.installments=(S.installments||[]).filter(i=>Number(i.id)!==Number(id));
+  S.transactions=S.transactions.filter(t=>Number(t.installmentId)!==Number(id));
+  sortTx();render();pushAll();showToast('✅ Eliminada');
 }
 function editDebt(id){const d=(S.debts||[]).find(x=>Number(x.id)===Number(id));if(d)openAddDebt(d);}
 async function deleteDebt(id){if(!confirm('¿Eliminar esta deuda?'))return;S.debts=(S.debts||[]).filter(d=>Number(d.id)!==Number(id));render();await pushAll();showToast('✅ Eliminada');}
@@ -1082,7 +1215,8 @@ function openAddTx(pre){
   <div class="fg" id="debtSelectorWrap" style="display:${curType==='debtpay'?'block':'none'}"><label class="fl">¿Qué deuda estás pagando?</label><select class="fs" id="txDebtId">${allDebts.map(x=>`<option value="${x.id}">${x.label}</option>`).join('')||'<option>Sin deudas registradas</option>'}</select></div>
   <div class="fg" id="catWrap" style="display:${curType==='debtpay'?'none':'block'}"><label class="fl">Categoría</label><select class="fs" id="txCat" onchange="checkCatBudget()">${(curType==='income'?ic:ec).map(c=>`<option ${pre?.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
   <div id="budgetWarn" style="display:none;margin-bottom:12px"></div>
-  <div class="fg" id="payWrap" style="display:${curType==='debtpay'?'none':'block'}"><label class="fl">Forma de pago</label><div class="pay-grid" id="payGrid">${renderPayGrid(curType)}</div><div id="tdcWrap" style="display:${curPay==='tdc'?'block':'none'};margin-top:8px"><select class="fs" id="txTDC">${S.tdcCards.map(c=>`<option>${c.name}</option>`).join('')}</select></div></div>
+  <div class="fg" id="payWrap" style="display:${curType==='debtpay'?'none':'block'}"><label class="fl">Forma de pago</label><div class="pay-grid" id="payGrid">${renderPayGrid(curType)}</div><div id="tdcWrap" style="display:${curPay==='tdc'?'block':'none'};margin-top:8px"><select class="fs" id="txTDC">${S.tdcCards.map(c=>`<option>${c.name}</option>`).join('')}</select></div>
+  <div id="instWrap" style="display:${curPay==='tdc'?'block':'none'};margin-top:8px"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;color:var(--text2)"><input type="checkbox" id="instCheck" onchange="toggleInstFields(this)" style="width:16px;height:16px"> Pagar en cuotas</label><div id="instFields" style="display:none;margin-top:10px;padding:10px;background:var(--bg3);border-radius:var(--rsm)"><div class="fr"><div class="fg" style="margin-bottom:8px"><label class="fl">N° cuotas</label><input class="fi" id="inlineCuotas" type="number" inputmode="numeric" min="2" max="60" placeholder="12" oninput="updateInlinePreview()"></div><div class="fg" style="margin-bottom:8px"><label class="fl">Tipo</label><select class="fs" id="inlineRateType" onchange="updateInlinePreview()"><option value="flat">Cuota fija</option><option value="rate">Con interés</option></select></div></div><div id="inlineRateWrap" style="display:none" class="fg" style="margin-bottom:8px"><label class="fl">Tasa mensual (%)</label><input class="fi" id="inlineRate" type="number" inputmode="decimal" step="0.1" placeholder="1.5" oninput="updateInlinePreview()"></div><div id="inlinePreview" style="font-size:12px;color:var(--accent);font-weight:500"></div></div></div></div>
   <div class="fr"><div class="fg"><label class="fl">Fecha</label><input class="fi" id="txDt" type="date" value="${pre?.date||today()}"></div><div class="fg"><label class="fl">Por</label><select class="fs" id="txU">${S.users.map(u=>`<option value="${u.id}" ${Number(u.id)===Number(S.currentUser.id)?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
   <div style="display:flex;gap:10px">${btnS('Cancelar','closeModal()','width:auto;flex:1')}<button onclick="saveTx()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background:#2563eb;color:#fff;">Guardar</button></div>`);
 }
@@ -1112,12 +1246,47 @@ function setType(t){
   const w=document.getElementById('budgetWarn');if(w)w.style.display='none';
   const desc=document.getElementById('txD');if(desc)desc.placeholder=t==='income'?'Ej: Sueldo enero...':t==='debtpay'?'Ej: Pago mensual...':'Ej: Supermercado...';
 }
-function setPay(p,el){curPay=p;document.querySelectorAll('#payGrid .pay-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');const tw=document.getElementById('tdcWrap');if(tw)tw.style.display=p==='tdc'?'block':'none';}
+function setPay(p,el){
+  curPay=p;
+  document.querySelectorAll('#payGrid .pay-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  const tw=document.getElementById('tdcWrap');if(tw)tw.style.display=p==='tdc'?'block':'none';
+  const iw=document.getElementById('instWrap');if(iw)iw.style.display=p==='tdc'?'block':'none';
+}
+function toggleInstFields(cb){
+  const f=document.getElementById('instFields');if(f)f.style.display=cb.checked?'block':'none';
+}
+function updateInlinePreview(){
+  const total=parseInt(document.getElementById('txA')?.value)||0;
+  const quotas=parseInt(document.getElementById('inlineCuotas')?.value)||0;
+  const rateType=document.getElementById('inlineRateType')?.value||'flat';
+  const rate=parseFloat(document.getElementById('inlineRate')?.value)||0;
+  const rw=document.getElementById('inlineRateWrap');if(rw)rw.style.display=rateType==='rate'?'block':'none';
+  const prev=document.getElementById('inlinePreview');if(!prev)return;
+  if(!total||!quotas){prev.textContent='';return;}
+  const inst={totalAmount:Math.round(total*RATES[document.getElementById('txC')?.value||'CLP']),totalQuotas:quotas,rate,rateType};
+  const monthly=calcInstallmentAmount(inst);
+  prev.textContent=`Cuota mensual: ${fmt(monthly)} × ${quotas} = ${fmt(monthly*quotas)}`;
+}
 function updCur(){const c=document.getElementById('txC').value,a=parseFloat(document.getElementById('txA').value)||0,el=document.getElementById('curInfo');if(c!=='CLP'&&a>0){el.style.display='block';el.textContent=`≈ ${fmt(Math.round(a*RATES[c]))} CLP`;}else el.style.display='none';}
 async function saveTx(){
   const desc=document.getElementById('txD').value.trim(),amtR=parseFloat(document.getElementById('txA').value)||0,cur=document.getElementById('txC').value;
   if(!desc||!amtR){showToast('⚠️ Completa descripción y monto');return;}
   const amt=Math.round(amtR*RATES[cur]);
+  const instCheck=document.getElementById('instCheck');
+  if(instCheck&&instCheck.checked&&curPay==='tdc'){
+    const quotas=parseInt(document.getElementById('inlineCuotas')?.value)||0;
+    const rateType=document.getElementById('inlineRateType')?.value||'flat';
+    const rate=parseFloat(document.getElementById('inlineRate')?.value)||0;
+    const tdcCard=document.getElementById('txTDC')?.value||'';
+    const category=document.getElementById('txCat')?.value||'Tarjeta de crédito';
+    if(!quotas||quotas<2){showToast('⚠️ Ingresa el número de cuotas (mínimo 2)');return;}
+    const inst={id:Date.now(),desc,totalAmount:amt,totalQuotas:quotas,rate,rateType,tdcCard,startDate:document.getElementById('txDt').value,category,user:parseInt(document.getElementById('txU').value),paid:false,createdAt:today()};
+    if(!S.installments)S.installments=[];S.installments.push(inst);
+    processInstallments();sortTx();closeModal();render();
+    addNotif('movement',`${uname(inst.user)} agregó compra en cuotas`,`${desc} — ${fmt(amt)} en ${quotas} cuotas de ${fmt(calcInstallmentAmount(inst))}/mes`);
+    await pushAll();showToast(`✅ ${quotas} cuotas de ${fmt(calcInstallmentAmount(inst))}`);playSound('expense');flashSaved();return;
+  }
   if(curType==='debtpay'){
     const debtId=document.getElementById('txDebtId')?.value;
     const tx={id:Date.now(),type:'debtpay',amount:amt,currency:cur,desc,category:'Pago deuda',date:document.getElementById('txDt').value,user:parseInt(document.getElementById('txU').value),payType:'transfer',tdcCard:'',debtId};
