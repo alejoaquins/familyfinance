@@ -209,7 +209,7 @@ const PAY_INC=[{id:'transfer',label:'Transferencia',icon:'📲'},{id:'cash',labe
 function payLabel(p){const f=[...PAY_EXP,...PAY_INC].find(x=>x.id===p);return f?f.icon+' '+f.label:p||'-';}
 function payBadgeClass(p){if(p==='tdc')return'b-tdc';if(p==='tdd')return'b-tdd';if(p==='transfer')return'b-trans';if(p==='cash')return'b-cash';return'b-cat';}
 const RATES={CLP:1,USD:950,EUR:1040,UF:38000,BRL:188,ARS:1};
-let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],installments:[]};
+let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},metasFund:0,debts:[],installments:[]};
 let shownBanners=new Set(),activeDateFilter='month';
 const fmt=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n);
 const fmtS=n=>n>=1000000?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+n;
@@ -446,7 +446,7 @@ function setSS(s){const dot=document.getElementById('syncDot'),txt=document.getE
 function playSound(type){try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);if(type==='income'){osc.frequency.setValueAtTime(523,ctx.currentTime);osc.frequency.setValueAtTime(784,ctx.currentTime+0.12);gain.gain.setValueAtTime(0.18,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.35);}else{osc.frequency.setValueAtTime(440,ctx.currentTime);osc.frequency.setValueAtTime(330,ctx.currentTime+0.1);gain.gain.setValueAtTime(0.12,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.28);osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.28);}}catch(e){}}
 function getBolsillos(){
   const{inc,expNoTDC}=getStats('month');const bal=inc-expNoTDC;
-  const ahorro=S.savings||0;const metas=Object.values(S.goalFunds||{}).reduce((a,v)=>a+v,0);
+  const ahorro=S.savings||0;const metas=(S.metasFund||0)+Object.values(S.goalFunds||{}).reduce((a,v)=>a+v,0);
   const tdcPending=S.transactions.filter(t=>parseDate(t.date).getMonth()===new Date().getMonth()&&t.type==='expense'&&t.payType==='tdc').reduce((a,t)=>a+t.amount,0);
   const tdcPaid=S.transactions.filter(t=>parseDate(t.date).getMonth()===new Date().getMonth()&&t.type==='debtpay').reduce((a,t)=>a+t.amount,0);
   return{disponible:bal-ahorro-metas,ahorro,metas,total:bal,tdcPending:Math.max(0,tdcPending-tdcPaid)};
@@ -464,6 +464,7 @@ async function syncFromCloud(){
     if(data.notifications)S.notifications=data.notifications;
     if(typeof data.savings==='number')S.savings=data.savings;
     if(data.goalFunds)S.goalFunds=data.goalFunds;
+    if(typeof data.metasFund==='number')S.metasFund=data.metasFund;
     if(data.debts)S.debts=data.debts;
     if(data.installments)S.installments=data.installments;
     sortTx();const instChanged=processInstallments();if(instChanged)pushAll();saveLocal();setSS('ok');updateNBadge();render();showAppBanners();
@@ -471,7 +472,7 @@ async function syncFromCloud(){
 }
 async function pushAll(){
   setSS('loading');
-  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},debts:S.debts||[],installments:S.installments||[],familyName:S.familyName,familyCode:S.familyCode});setSS('ok');}
+  try{await dbWrite({transactions:S.transactions,users:S.users,budgets:S.budgets,tdcCards:S.tdcCards,customCategories:S.customCategories||[],goals:S.goals||[],notifications:S.notifications||[],savings:S.savings||0,goalFunds:S.goalFunds||{},metasFund:S.metasFund||0,debts:S.debts||[],installments:S.installments||[],familyName:S.familyName,familyCode:S.familyCode});setSS('ok');}
   catch(e){setSS('err');}
 }
 function addNotif(type,title,body){
@@ -523,7 +524,7 @@ async function createFamily(){
     const r=await fetch(JURL,{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':JKEY,'X-Bin-Private':'false'},body:JSON.stringify({transactions:[],users:[user],budgets:defB,tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],familyName:fn})});
     if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const binId=d.metadata.id;
     localStorage.setItem('ff_binId',binId);
-    Object.assign(S,{familyCode:binId,familyName:fn,currentUser:user,users:[user],budgets:defB,transactions:[],tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],installments:[]});
+    Object.assign(S,{familyCode:binId,familyName:fn,currentUser:user,users:[user],budgets:defB,transactions:[],tdcCards:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},metasFund:0,debts:[],installments:[]});
     saveLocal();startApp();
   }catch(e){showOb('obMain');showToast('❌ Error: '+e.message);}
 }
@@ -538,7 +539,7 @@ async function joinFamily(){
     fd.users=[...(fd.users||[]),user];
     await fetch(`${JURL}/${code}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JKEY},body:JSON.stringify(fd)});
     localStorage.setItem('ff_binId',code);
-    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users,transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[],installments:fd.installments||[]});
+    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users,transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},metasFund:fd.metasFund||0,debts:fd.debts||[],installments:fd.installments||[]});
     sortTx();saveLocal();startApp();
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
@@ -551,7 +552,7 @@ async function recoverFamily(){
     const existing=(fd.users||[]).find(u=>u.name.toLowerCase()===name.toLowerCase());let user;
     if(existing){user=existing;}else{const colors=['#2563eb','#16a34a','#d97706','#7c3aed','#db2777'];user={id:Date.now(),name,role:'member',color:colors[(fd.users||[]).length%colors.length]};fd.users=[...(fd.users||[]),user];await fetch(`${JURL}/${code}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JKEY},body:JSON.stringify(fd)});}
     localStorage.setItem('ff_binId',code);
-    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users||[],transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},debts:fd.debts||[],installments:fd.installments||[]});
+    Object.assign(S,{familyCode:code,familyName:fd.familyName||'Mi Familia',currentUser:user,users:fd.users||[],transactions:fd.transactions||[],budgets:fd.budgets||[],tdcCards:fd.tdcCards||[],customCategories:fd.customCategories||[],goals:fd.goals||[],notifications:fd.notifications||[],savings:fd.savings||0,goalFunds:fd.goalFunds||{},metasFund:fd.metasFund||0,debts:fd.debts||[],installments:fd.installments||[]});
     sortTx();saveLocal();startApp();showToast('✅ Bienvenido/a, '+user.name);
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
@@ -1384,22 +1385,41 @@ function editTDC(id){const c=S.tdcCards.find(x=>Number(x.id)===Number(id));if(c)
 function removeTDC(id){S.tdcCards=(S.tdcCards||[]).filter(c=>Number(c.id)!==Number(id));render();pushAll();}
 function openTransferencia(preFrom){
   const b=getBolsillos();
+  const goalOpts=(S.goals||[]).length
+    ? (S.goals||[]).map(g=>{const gf=(S.goalFunds||{})[g.id]||0;const saved=(Number(g.saved)||0)+gf;const pct=g.amount>0?Math.round((saved/g.amount)*100):0;return`<option value="goal_${g.id}">${g.emoji||'⭐'} ${g.name} (${pct}% de ${fmtS(g.amount)})</option>`;}).join('')
+    : '<option value="">Sin metas registradas</option>';
   modal(`<div class="mtitle">💸 Transferencia interna</div>
   <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Mueve dinero entre tus cuentas virtuales.</div>
-  <div class="fg"><label class="fl">Desde</label><select class="fs" id="tfFrom"><option value="disponible" ${preFrom==='disponible'?'selected':''}>💳 Disponible (${fmtS(b.disponible)})</option><option value="ahorro" ${preFrom==='ahorro'?'selected':''}>🏦 Ahorro (${fmtS(b.ahorro)})</option><option value="metas" ${preFrom==='metas'?'selected':''}>⭐ Metas (${fmtS(b.metas)})</option></select></div>
-  <div class="fg"><label class="fl">Hacia</label><select class="fs" id="tfTo"><option value="ahorro">🏦 Ahorro</option><option value="disponible">💳 Disponible</option><option value="metas">⭐ Metas</option></select></div>
+  <div class="fg"><label class="fl">Desde</label><select class="fs" id="tfFrom" onchange="toggleGoalSelector()"><option value="disponible" ${preFrom==='disponible'?'selected':''}>💳 Disponible (${fmtS(b.disponible)})</option><option value="ahorro" ${preFrom==='ahorro'?'selected':''}>🏦 Ahorro (${fmtS(b.ahorro)})</option><option value="metas" ${preFrom==='metas'?'selected':''}>⭐ Metas (${fmtS(b.metas)})</option></select></div>
+  <div class="fg"><label class="fl">Hacia</label><select class="fs" id="tfTo" onchange="toggleGoalSelector()"><option value="ahorro">🏦 Ahorro</option><option value="disponible">💳 Disponible</option><option value="metas">⭐ Metas</option></select></div>
+  <div class="fg" id="tfGoalWrap" style="display:none"><label class="fl">¿A cuál meta?</label><select class="fs" id="tfGoalId">${goalOpts}</select></div>
   <div class="fg"><label class="fl">Descripción (opcional)</label><input class="fi" id="tfDesc" placeholder="Ej: Ahorro del mes, Fondo vacaciones..."></div>
   <div class="fg"><label class="fl">Monto (CLP)</label><input class="fi" id="tfAmt" type="number" inputmode="decimal" placeholder="0"></div>
   <div style="display:flex;gap:10px">${btnS('Cancelar','closeModal()','width:auto;flex:1')}<button onclick="doTrf()" style="flex:2;padding:13px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:500;border:none;background:#2563eb;color:#fff;">Transferir</button></div>`);
+  toggleGoalSelector();
+}
+function toggleGoalSelector(){
+  const from=document.getElementById('tfFrom')?.value;
+  const to=document.getElementById('tfTo')?.value;
+  const wrap=document.getElementById('tfGoalWrap');
+  if(wrap) wrap.style.display=(to==='metas'||from==='metas')?'block':'none';
 }
 async function doTrf(){
   const from=document.getElementById('tfFrom').value,to=document.getElementById('tfTo').value,amt=parseInt(document.getElementById('tfAmt').value)||0;
   const desc=document.getElementById('tfDesc').value.trim()||`Transferencia ${from}→${to}`;
   if(!amt||amt<=0){showToast('⚠️ Ingresa un monto');return;}if(from===to){showToast('⚠️ Origen y destino distintos');return;}
+  const goalId=document.getElementById('tfGoalId')?.value?.replace('goal_','');
   if(from==='ahorro'){S.savings=Math.max(0,(S.savings||0)-amt);}
-  else if(from==='metas'){const gids=Object.keys(S.goalFunds||{});if(gids.length){S.goalFunds[gids[0]]=Math.max(0,(S.goalFunds[gids[0]]||0)-amt);}}
+  else if(from==='metas'){
+    if(goalId&&(S.goalFunds||{})[goalId]!==undefined){S.goalFunds[goalId]=Math.max(0,(S.goalFunds[goalId]||0)-amt);}
+    else{S.metasFund=Math.max(0,(S.metasFund||0)-amt);}
+  }
   if(to==='ahorro'){S.savings=(S.savings||0)+amt;}
-  else if(to==='metas'){if(!S.goalFunds)S.goalFunds={};const gids=Object.keys(S.goalFunds);if(gids.length)S.goalFunds[gids[0]]=(S.goalFunds[gids[0]]||0)+amt;}
+  else if(to==='metas'){
+    if(!goalId){showToast('⚠️ Selecciona una meta');return;}
+    if(!S.goalFunds)S.goalFunds={};
+    S.goalFunds[goalId]=(S.goalFunds[goalId]||0)+amt;
+  }
   S.transactions.push({id:Date.now(),type:'internal',amount:amt,currency:'CLP',desc,category:to==='ahorro'?CAT_AHORRO:CAT_META,date:today(),user:S.currentUser.id,payType:'transfer',tdcCard:''});
   sortTx();closeModal();render();await pushAll();showToast('✅ Transferencia realizada');
 }
@@ -1408,7 +1428,7 @@ async function saveUser(){const n=document.getElementById('uN').value.trim(),r=d
 function applyTheme(){document.documentElement.classList.toggle('dark',S.dark);const btn=document.getElementById('themeBtn');if(btn)btn.textContent=S.dark?'☀️':'🌙';const fab=document.getElementById('fabBtn');if(fab){fab.style.backgroundColor=S.dark?'#f1f5f9':'#2563eb';fab.style.color=S.dark?'#1e293b':'#fff';fab.style.boxShadow=S.dark?'0 4px 20px rgba(0,0,0,.5)':'0 4px 20px rgba(37,99,235,.5)';}}
 function toggleTheme(){S.dark=!S.dark;applyTheme();saveLocal();}
 function switchTab(tab){S.tab=tab;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));document.getElementById('fabBtn').style.display=['home','transactions','budget','goals'].includes(tab)?'flex':'none';render();setTimeout(()=>showHint(tab),400);;setTimeout(()=>showHint(tab),400);}
-function saveLocal(){try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod,goalsAiRecs:S.goalsAiRecs||[],savings:S.savings||0,goalFunds:S.goalFunds||{}}));}catch(e){}}
+function saveLocal(){try{localStorage.setItem('ff_session',JSON.stringify({familyCode:S.familyCode,familyName:S.familyName,currentUser:S.currentUser,dark:S.dark,aiRecs:S.aiRecs,aiPeriod:S.aiPeriod,goalsAiRecs:S.goalsAiRecs||[],savings:S.savings||0,goalFunds:S.goalFunds||{},metasFund:S.metasFund||0}));}catch(e){}}
 function loadLocal(){try{const r=localStorage.getItem('ff_session');if(r){Object.assign(S,JSON.parse(r));return true;}}catch(e){}return false;}
 function render(){
   const app=document.getElementById('mainApp');if(!app||app.style.display==='none')return;
