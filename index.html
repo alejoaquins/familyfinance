@@ -52,7 +52,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg3);color:var(--text)}
 .sv.green{color:var(--green)}.sv.red{color:var(--red)}.sv.amber{color:var(--amber)}
 .pb{background:var(--bg3);border-radius:4px;height:8px;overflow:hidden}.pf{height:100%;border-radius:4px;transition:width .3s}
 .tab-row{display:flex;background:var(--bg3);border-radius:var(--rsm);padding:3px;margin-bottom:12px;overflow-x:auto}
-.tab{flex:1;padding:8px 6px;text-align:center;font-size:11px;border-radius:6px;cursor:pointer;color:var(--text2);font-weight:500;white-space:nowrap}
+.tab{flex:1;padding:8px 6px;text-align:center;font-size:11px;border-radius:6px;cursor:pointer;color:var(--text2);font-weight:500;white-space:nowrap;min-width:0}
 .tab.active{background:var(--bg2);color:var(--text);box-shadow:var(--sh)}
 .chip{display:inline-flex;align-items:center;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:500;background:var(--bg3);color:var(--text2);border:.5px solid var(--border);margin:2px;cursor:pointer}
 .chip.active{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
@@ -133,7 +133,8 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 .hint-banner{position:fixed;bottom:calc(68px + max(env(safe-area-inset-bottom),8px));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:398px;z-index:45;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;background:var(--accent);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.4);cursor:pointer}
 @keyframes flashGreen{0%{background:rgba(22,163,74,0)}30%{background:rgba(22,163,74,.15)}100%{background:transparent}}
 .flash-saved{animation:flashGreen .7s ease forwards}
-</style></head>
+</style>
+</head>
 <body>
 <div id="onboarding" style="display:none">
   <div class="ob-screen" id="obMain">
@@ -174,7 +175,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
   <div class="hdr">
     <div><div class="hdr-title" id="hdrTitle">💰 FamilyFinance</div><div class="hdr-sub"><span class="sync-dot sync-ok" id="syncDot"></span><span id="syncText">Sincronizado</span></div></div>
     <div style="display:flex;gap:8px">
-      <div class="icon-btn" id="themeBtn" onclick="toggleTheme()">🌙</div>
+      <div class="icon-btn" onclick="toggleTheme()" id="themeBtn">🌙</div>
       <div class="icon-btn" onclick="openNC()">🔔<span class="nbadge" id="nbadge" style="display:none">0</span></div>
     </div>
   </div>
@@ -193,6 +194,7 @@ input:checked+.sw-sl{background:#2563eb}input:checked+.sw-sl:before{transform:tr
 <script>
 
 
+
 const JKEY='$2a$10$WvSwHOqyqOCavbC.oSRUne60mu2Jo3wfmNXb4njKLXjbDJ.28rh5e';
 const JURL='https://api.jsonbin.io/v3/b';
 const APP_URL='https://familyfinance.ingsuarezsemeco.workers.dev/';
@@ -208,7 +210,7 @@ function payLabel(p){const f=[...PAY_EXP,...PAY_INC].find(x=>x.id===p);return f?
 function payBadgeClass(p){if(p==='tdc')return'b-tdc';if(p==='tdd')return'b-tdd';if(p==='transfer')return'b-trans';if(p==='cash')return'b-cash';return'b-cat';}
 const RATES={CLP:1,USD:950,EUR:1040,UF:38000,BRL:188,ARS:1};
 let S={dark:false,tab:'home',aiPeriod:'month',aiRecs:[],aiLoading:false,goalsAiRecs:[],goalsAiLoading:false,familyCode:'',familyName:'',currentUser:{id:0,name:'',role:'admin'},users:[],transactions:[],tdcCards:[],budgets:[],customCategories:[],goals:[],notifications:[],savings:0,goalFunds:{},debts:[],installments:[]};
-let syncInterval=null,shownBanners=new Set(),activeDateFilter='month';
+let shownBanners=new Set(),activeDateFilter='month';
 const fmt=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n);
 const fmtS=n=>n>=1000000?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+n;
 function parseDate(s){if(!s)return new Date();const[y,m,d]=String(s).split('-').map(Number);return new Date(y,m-1,d);}
@@ -553,7 +555,7 @@ async function recoverFamily(){
     sortTx();saveLocal();startApp();showToast('✅ Bienvenido/a, '+user.name);
   }catch(e){showOb('obMain');showToast('❌ '+e.message);}
 }
-function startApp(){document.getElementById('onboarding').style.display='none';document.getElementById('mainApp').style.display='flex';document.getElementById('fabBtn').style.display='flex';applyTheme();syncFromCloud();if(syncInterval)clearInterval(syncInterval);syncInterval=setInterval(syncFromCloud,30000);setTimeout(showOnboarding2,800);}
+function startApp(){document.getElementById('onboarding').style.display='none';document.getElementById('mainApp').style.display='flex';document.getElementById('fabBtn').style.display='flex';applyTheme();syncFromCloud();setTimeout(showOnboarding2,800);}
 
 function getStats(period){
   const now=new Date(),m=now.getMonth(),y=now.getFullYear();let txs=S.transactions;
@@ -965,7 +967,7 @@ function shareCode(){
   else{navigator.clipboard.writeText(txt).then(()=>showToast('✅ Mensaje copiado — pégalo en WhatsApp o correo'));}
 }
 function copyCode(){navigator.clipboard.writeText(S.familyCode).then(()=>showToast('✅ Código copiado')).catch(()=>showToast('Código: '+S.familyCode));}
-function leaveFamily(){if(!confirm('¿Salir de esta familia?\nPodrás volver con el código.'))return;localStorage.removeItem('ff_session');localStorage.removeItem('ff_binId');if(syncInterval)clearInterval(syncInterval);location.reload();}
+function leaveFamily(){if(!confirm('¿Salir de esta familia?\nPodrás volver con el código.'))return;localStorage.removeItem('ff_session');localStorage.removeItem('ff_binId');location.reload();}
 
 function openExportModal(fmt2){
   const now=new Date();const firstDay=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().slice(0,10);
@@ -1434,6 +1436,7 @@ const urlCode=new URLSearchParams(window.location.search).get('code');if(urlCode
 const hasSession=loadLocal();applyTheme();
 if(hasSession&&S.familyCode){document.getElementById('onboarding').style.display='none';startApp();}
 else{document.getElementById('onboarding').style.display='flex';document.getElementById('onboarding').style.flexDirection='column';showOb('obMain');}
+
 
 </script>
 </body>
